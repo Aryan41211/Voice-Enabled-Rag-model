@@ -60,15 +60,19 @@ def evaluate_retriever(
     gold: set[str],
     k: int,
     use_sparse: bool = True,
+    reranker=None,
+    rerank_candidates: int = 20,
 ) -> tuple[dict, float]:
     t0 = time.perf_counter()
     query_vec = embedder.encode_query(query)
     if isinstance(retriever, HybridRetriever):
         hits = retriever.search(query_vec, query, k=k)
     elif isinstance(retriever, DenseRetriever) or not use_sparse:
-        hits = retriever.search(query_vec, k=k, query_text=query)
+        hits = retriever.search(query_vec, k=k if reranker is None else rerank_candidates, query_text=query)
     else:
         hits = retriever.search(query, k=k)
+    if reranker is not None and hits:
+        hits = reranker.rerank(query, hits, top_n=k)
     elapsed_ms = (time.perf_counter() - t0) * 1000
 
     ranked = [match_key(h) for h in hits]
@@ -88,12 +92,22 @@ def run(
     index_dir: str | Path,
     k: int = 5,
     model_name: str | None = None,
+    rerank: bool = False,
+    max_queries: int | None = None,
 ) -> dict:
     index_dir = Path(index_dir)
     gold_records = load_eval_gold(lang, index_dir)
+    if max_queries is not None:
+        gold_records = gold_records[:max_queries]
     embedder = Embedder(model_name=model_name)
     # warm up the model so the first timed query doesn't pay load cost
     embedder.encode_query("warmup")
+
+    reranker = None
+    if rerank:
+        from app.retrieval.rerank import CrossEncoderReranker
+
+        reranker = CrossEncoderReranker()
 
     results = {}
     for strategy in strategies:
@@ -109,12 +123,22 @@ def run(
         agg = {
             "dense": {"recall_3": [], "recall_5": [], "mrr": [], "latency_ms": []},
             "hybrid": {"recall_3": [], "recall_5": [], "mrr": [], "latency_ms": []},
+            "rerank": {"recall_3": [], "recall_5": [], "mrr": [], "latency_ms": []},
         }
         for rec in gold_records:
             gold = gold_ids(rec)
-            for name, retriever in (("dense", dense), ("hybrid", hybrid)):
+            for name, retriever in (
+                ("dense", dense),
+                ("hybrid", hybrid),
+                ("rerank", dense),
+            ):
                 metrics, elapsed = evaluate_retriever(
-                    retriever, rec["query"], embedder, gold, k
+                    retriever,
+                    rec["query"],
+                    embedder,
+                    gold,
+                    k,
+                    reranker=reranker if name == "rerank" else None,
                 )
                 for mk, mv in metrics.items():
                     agg[name][mk].append(mv)
@@ -122,7 +146,9 @@ def run(
 
         m = load_manifest(lang, strategy, index_dir)
         per_retriever = {}
-        for name in ("dense", "hybrid"):
+        for name in ("dense", "hybrid", "rerank"):
+            if name == "rerank" and reranker is None:
+                continue
             a = agg[name]
             n = max(len(a["latency_ms"]), 1)
             per_retriever[name] = {
@@ -152,6 +178,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--index-dir", default=None)
     p.add_argument("--topk", type=int, default=5)
     p.add_argument("--model", default=None)
+    p.add_argument("--rerank", action="store_true",
+                   help="enable cross-encoder rerank ablation")
+    p.add_argument("--max-queries", type=int, default=None,
+                   help="cap number of eval queries")
     p.add_argument("--out", default=None)
     return p
 
@@ -165,6 +195,8 @@ def main() -> None:
         index_dir=args.index_dir or settings.index_dir,
         k=args.topk,
         model_name=args.model,
+        rerank=args.rerank,
+        max_queries=args.max_queries,
     )
     out_path = args.out or (
         Path(settings.index_dir).parent.parent
