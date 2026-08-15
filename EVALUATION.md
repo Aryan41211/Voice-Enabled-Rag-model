@@ -19,12 +19,14 @@ Sample: **300 queries** from MSMARCO-XI (`hi`, validation), seed **42**, corpus 
 
 Notable: **BM25 fusion *hurt*** dense-only results (MRR 0.452 → 0.397). On Hindi, surface-form matching is weak (morphology/transliteration), so RRF down-ranks good dense hits with poor sparse ones. The live demo therefore uses **dense retrieval over metadata chunks**; the hybrid path stays available behind a toggle.
 
-## 2. Re-ranking Ablation (if implemented)
+## 2. Re-ranking Ablation
+
+Cross-encoder: `BAAI/bge-reranker-v2-m3` over the top-20 dense candidates (60 queries).
 
 | Config | Recall@5 | MRR | Added latency (ms) | Worth it? |
 |---|---|---|---|---|
-| No re-rank | 0.709 | 0.452 | 0 | — |
-| Cross-encoder re-rank | — | — | — | Y/N + why |
+| No re-rank | 0.719 | 0.476 | 0 | — |
+| Cross-encoder re-rank | 0.803 | 0.574 | ~345 (p50 total 359 ms) | **No for live demo** — +8.4 R@5 pts and +0.10 MRR are real, but p50 total ≈ 360 ms blows the sub-200 ms budget. Keep as a toggle/offline-only stage. |
 
 ## 3. Answer Quality (small manual eval, ~20–30 queries)
 

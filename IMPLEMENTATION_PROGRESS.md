@@ -24,7 +24,7 @@ machine-checkable status.
 ## Day 3 — Retrieval Evaluation & Hybrid Search
 - [x] Dense + sparse + hybrid (RRF) retrievers (`app/retrieval/`)
 - [x] Run eval across strategies, pick winner → EVALUATION.md (winner: metadata-aware + dense, MRR 0.452)
-- [~] Optional cross-encoder rerank + latency cost
+- [x] Cross-encoder rerank ablation → EVALUATION.md (gains R@5 +8.4 pts but +345 ms; excluded from live path)
 
 ## Day 4 — Generation & Guardrails
 - [ ] Generation stage: extractive fallback + hosted LLM, forced citation
