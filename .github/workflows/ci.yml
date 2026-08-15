@@ -83,6 +83,8 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: pip install -r requirements-test.txt websockets==15.0.1 edge-tts
+      - name: Install ffmpeg (mp3 -> wav conversion)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Synthesize sample Hindi speech
         run: |
           python -m edge_tts --voice hi-IN-SwaraNeural \
