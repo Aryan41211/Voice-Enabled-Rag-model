@@ -1,6 +1,5 @@
 from app.retrieval.tokenize import tokenize
 from app.retrieval.retrievers import (
-    DenseRetriever,
     HybridRetriever,
     SparseRetriever,
     reciprocal_rank_fusion,
@@ -92,7 +91,9 @@ def test_hybrid_fuses_dense_and_sparse():
 
     from app.retrieval.retrievers import make_retrievers
 
-    d, s = make_retrievers(chunks, vectors=vecs, bm25=BM25Okapi([tokenize(c.text) for c in chunks]))
+    d, s = make_retrievers(
+        chunks, vectors=vecs, bm25=BM25Okapi([tokenize(c.text) for c in chunks])
+    )
     hybrid = HybridRetriever(d, s)
     hits = hybrid.search(np.array([1.0, 0.0], dtype="float32"), "पहला दस्तावेज़", k=2)
     assert len(hits) == 2

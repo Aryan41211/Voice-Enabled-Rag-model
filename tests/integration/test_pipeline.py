@@ -1,8 +1,6 @@
 """End-to-end harness tests with an in-memory index and fake components."""
 
 import asyncio
-import tempfile
-from pathlib import Path
 
 import faiss
 import numpy as np
@@ -15,7 +13,6 @@ from app.guardrails.guardrails import (
     RetrievalGuardrail,
 )
 from app.harness.pipeline import CircuitBreaker, Pipeline
-from app.harness.schemas import Transcript
 from app.ingestion.chunking import Chunk
 from app.retrieval.retrievers import DenseRetriever
 from app.stt.client import FakeSTT
@@ -40,14 +37,26 @@ class FakeEmbedder:
 
 def _dense_retriever():
     chunks = [
-        Chunk(chunk_id="c1", text="दिल्ली भारत की राजधानी है",
-              context="दिल्ली भारत की राजधानी है",
-              source_query_id=1, passage_index=0, language="hi",
-              strategy="metadata", position=0),
-        Chunk(chunk_id="c2", text="ताजमहल आगरा में है",
-              context="ताजमहल आगरा में है",
-              source_query_id=2, passage_index=0, language="hi",
-              strategy="metadata", position=0),
+        Chunk(
+            chunk_id="c1",
+            text="दिल्ली भारत की राजधानी है",
+            context="दिल्ली भारत की राजधानी है",
+            source_query_id=1,
+            passage_index=0,
+            language="hi",
+            strategy="metadata",
+            position=0,
+        ),
+        Chunk(
+            chunk_id="c2",
+            text="ताजमहल आगरा में है",
+            context="ताजमहल आगरा में है",
+            source_query_id=2,
+            passage_index=0,
+            language="hi",
+            strategy="metadata",
+            position=0,
+        ),
     ]
     vecs = np.asarray([[1, 0, 0, 0], [0.9, 0.1, 0, 0]], dtype="float32")
     index = faiss.IndexFlatIP(4)
@@ -61,9 +70,7 @@ def _guardrails():
         retrieval_gr=RetrievalGuardrail(
             min_top_score=0.3, min_margin=0.0, ambiguous_gap=0.0
         ),
-        output_gr=OutputGuardrail(
-            embedder=FakeEmbedder(), groundedness_threshold=0.0
-        ),
+        output_gr=OutputGuardrail(embedder=FakeEmbedder(), groundedness_threshold=0.0),
     )
 
 
@@ -110,8 +117,11 @@ def test_pipeline_retrieval_refusal_path():
 
             return [
                 RetrievedChunk(
-                    chunk_id="cx", text="असंबंधित पाठ", score=0.1,
-                    source="dense", strategy="metadata",
+                    chunk_id="cx",
+                    text="असंबंधित पाठ",
+                    score=0.1,
+                    source="dense",
+                    strategy="metadata",
                 )
             ]
 
@@ -123,7 +133,8 @@ def test_pipeline_retrieval_refusal_path():
 
 def test_pipeline_llm_failure_falls_back_to_extractive():
     p = _pipeline(
-        generator=LLMGenerator(api_key=""), stt=None,
+        generator=LLMGenerator(api_key=""),
+        stt=None,
         settings=_settings(max_retries=0),
     )
     resp = p.query("दिल्ली कहाँ है")
@@ -140,7 +151,8 @@ def test_pipeline_no_stt_refuses_audio():
 def test_circuit_breaker_opens_and_recovers():
     cb = CircuitBreaker(threshold=3, reset_s=60)
     assert not cb.is_open
-    cb.record_failure(); cb.record_failure()
+    cb.record_failure()
+    cb.record_failure()
     assert not cb.is_open
     cb.record_failure()
     assert cb.is_open
@@ -153,5 +165,6 @@ def test_circuit_breaker_half_open_after_reset():
     cb.record_failure()
     assert cb.is_open
     import time
+
     time.sleep(0.3)
     assert not cb.is_open

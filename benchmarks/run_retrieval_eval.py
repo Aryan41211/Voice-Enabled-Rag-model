@@ -50,7 +50,9 @@ def gold_ids(record: dict) -> set[str]:
 
 
 def match_key(chunk) -> str:
-    return f"{chunk.metadata.get('source_query_id')}:{chunk.metadata.get('passage_index')}"
+    return (
+        f"{chunk.metadata.get('source_query_id')}:{chunk.metadata.get('passage_index')}"
+    )
 
 
 def evaluate_retriever(
@@ -68,7 +70,9 @@ def evaluate_retriever(
     if isinstance(retriever, HybridRetriever):
         hits = retriever.search(query_vec, query, k=k)
     elif isinstance(retriever, DenseRetriever) or not use_sparse:
-        hits = retriever.search(query_vec, k=k if reranker is None else rerank_candidates, query_text=query)
+        hits = retriever.search(
+            query_vec, k=k if reranker is None else rerank_candidates, query_text=query
+        )
     else:
         hits = retriever.search(query, k=k)
     if reranker is not None and hits:
@@ -178,10 +182,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--index-dir", default=None)
     p.add_argument("--topk", type=int, default=5)
     p.add_argument("--model", default=None)
-    p.add_argument("--rerank", action="store_true",
-                   help="enable cross-encoder rerank ablation")
-    p.add_argument("--max-queries", type=int, default=None,
-                   help="cap number of eval queries")
+    p.add_argument(
+        "--rerank", action="store_true", help="enable cross-encoder rerank ablation"
+    )
+    p.add_argument(
+        "--max-queries", type=int, default=None, help="cap number of eval queries"
+    )
     p.add_argument("--out", default=None)
     return p
 
@@ -206,7 +212,12 @@ def main() -> None:
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as fh:
-        json.dump({"lang": args.lang or settings.data_lang, "results": results}, fh, ensure_ascii=False, indent=2)
+        json.dump(
+            {"lang": args.lang or settings.data_lang, "results": results},
+            fh,
+            ensure_ascii=False,
+            indent=2,
+        )
     print(f"[eval] wrote {out_path}")
 
 

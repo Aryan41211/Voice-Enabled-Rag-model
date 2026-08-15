@@ -31,28 +31,74 @@ from app.ingestion.embed import Embedder
 
 UNSAFE_KEYWORDS = [
     # violence / weapons
-    "हत्या", "मारना", "बम", "बम बनाना", "हिंसा", "काटना", "गोली", "बंदूक",
-    "kill", "murder", "bomb", "violence", "weapon",
+    "हत्या",
+    "मारना",
+    "बम",
+    "बम बनाना",
+    "हिंसा",
+    "काटना",
+    "गोली",
+    "बंदूक",
+    "kill",
+    "murder",
+    "bomb",
+    "violence",
+    "weapon",
     # self-harm
-    "आत्महत्या", "खुदकुशी", "खुद को मार", "खुद को नुकसान", "खुद को चोट",
-    "अपने आप को नुकसान", "मुझे नुकसान पहुंचाने", "suicide", "self harm",
-    "hurt myself", "cut myself",
+    "आत्महत्या",
+    "खुदकुशी",
+    "खुद को मार",
+    "खुद को नुकसान",
+    "खुद को चोट",
+    "अपने आप को नुकसान",
+    "मुझे नुकसान पहुंचाने",
+    "suicide",
+    "self harm",
+    "hurt myself",
+    "cut myself",
     # hate speech
-    "नफरत", "जातिवाद", "नस्लवाद", "hate speech",
+    "नफरत",
+    "जातिवाद",
+    "नस्लवाद",
+    "hate speech",
     # illegal drugs
-    "ड्रग्स कैसे बनाएं", "नशीला पदार्थ", "how to make drugs", "cocaine",
+    "ड्रग्स कैसे बनाएं",
+    "नशीला पदार्थ",
+    "how to make drugs",
+    "cocaine",
     # explicit sexual content
-    "अश्लील", "सेक्स कैसे", "porn", "nsfw",
+    "अश्लील",
+    "सेक्स कैसे",
+    "porn",
+    "nsfw",
 ]
 
 OFF_TOPIC_KEYWORDS = [
     # gambling / betting / match-fixing
-    "बेटिंग", "जुआ", "सट्टा", "कैसीनो", "बाज़ी", "लॉटरी", "मटका",
-    "gambling", "betting", "casino", "lottery", "poker",
+    "बेटिंग",
+    "जुआ",
+    "सट्टा",
+    "कैसीनो",
+    "बाज़ी",
+    "लॉटरी",
+    "मटका",
+    "gambling",
+    "betting",
+    "casino",
+    "lottery",
+    "poker",
     # speculative trading / crypto
-    "क्रिप्टो", "बिटकॉइन", "स्टॉक टिप्स", "ट्रेडिंग", "bitcoin", "crypto",
+    "क्रिप्टो",
+    "बिटकॉइन",
+    "स्टॉक टिप्स",
+    "ट्रेडिंग",
+    "bitcoin",
+    "crypto",
     # dating / adult services
-    "डेटिंग", "शादी का साथी", "dating", "hookup",
+    "डेटिंग",
+    "शादी का साथी",
+    "dating",
+    "hookup",
 ]
 
 REFUSAL_SAFE = (
@@ -70,13 +116,13 @@ NO_RELEVANT_TEMPLATE = (
     "that question."
 )
 
-AMBIGUOUS_TEMPLATE = (
-    "That question is ambiguous — could you be more specific?"
-)
+AMBIGUOUS_TEMPLATE = "That question is ambiguous — could you be more specific?"
 
 DEFAULT_MIN_TOP_SCORE = 0.40
 DEFAULT_MIN_MARGIN = 0.03
-DEFAULT_AMBIGUOUS_GAP = 0.0  # disabled: gap distributions overlap (see EVALUATION.md §6)
+DEFAULT_AMBIGUOUS_GAP = (
+    0.0  # disabled: gap distributions overlap (see EVALUATION.md §6)
+)
 DEFAULT_MIN_CONFIDENCE = 0.5
 DEFAULT_MIN_LENGTH = 3
 DEFAULT_MIN_TOKENS = 2
@@ -164,27 +210,37 @@ class InputGuardrail:
         text = transcript.text.strip()
         if len(text) < self.min_length:
             return GuardrailResult(
-                passed=False, layer=self.layer, action="clarify",
+                passed=False,
+                layer=self.layer,
+                action="clarify",
                 reason="transcript too short to be a real query",
             )
         if len(text.split()) < self.min_tokens:
             return GuardrailResult(
-                passed=False, layer=self.layer, action="clarify",
+                passed=False,
+                layer=self.layer,
+                action="clarify",
                 reason="transcript has too few words to be a real query",
             )
         if transcript.confidence < self.min_confidence:
             return GuardrailResult(
-                passed=False, layer=self.layer, action="clarify",
+                passed=False,
+                layer=self.layer,
+                action="clarify",
                 reason=f"low STT confidence ({transcript.confidence:.2f})",
             )
         if _contains_unsafe(text):
             return GuardrailResult(
-                passed=False, layer=self.layer, action="refuse",
+                passed=False,
+                layer=self.layer,
+                action="refuse",
                 reason="unsafe content detected",
             )
         if _contains_off_topic(text):
             return GuardrailResult(
-                passed=False, layer=self.layer, action="refuse",
+                passed=False,
+                layer=self.layer,
+                action="refuse",
                 reason="off-topic domain detected",
             )
         if self.use_embedding_offtopic:
@@ -196,7 +252,9 @@ class InputGuardrail:
                 sim = float(np.dot(qv, centroid))
                 if sim < self.off_topic_threshold:
                     return GuardrailResult(
-                        passed=False, layer=self.layer, action="refuse",
+                        passed=False,
+                        layer=self.layer,
+                        action="refuse",
                         reason=f"off-topic (similarity {sim:.3f})",
                     )
         return GuardrailResult(passed=True, layer=self.layer)
@@ -221,13 +279,17 @@ class RetrievalGuardrail:
     def check(self, result: RetrievalResult) -> GuardrailResult:
         if not result.chunks:
             return GuardrailResult(
-                passed=False, layer=self.layer, action="refuse",
+                passed=False,
+                layer=self.layer,
+                action="refuse",
                 reason="no retrieved chunks",
             )
         top = result.chunks[0].score
         if top < self.min_top_score:
             return GuardrailResult(
-                passed=False, layer=self.layer, action="refuse",
+                passed=False,
+                layer=self.layer,
+                action="refuse",
                 reason=f"top score {top:.3f} below floor {self.min_top_score}",
             )
         # Margin heuristic (calibrated on eval gold): if the best match is not
@@ -236,14 +298,18 @@ class RetrievalGuardrail:
             margin = top - result.background_score
             if margin < self.min_margin:
                 return GuardrailResult(
-                    passed=False, layer=self.layer, action="refuse",
+                    passed=False,
+                    layer=self.layer,
+                    action="refuse",
                     reason=f"best match not isolated (margin {margin:.3f})",
                 )
         if len(result.chunks) >= 3:
             gap = result.chunks[0].score - result.chunks[2].score
             if gap < self.ambiguous_gap:
                 return GuardrailResult(
-                    passed=False, layer=self.layer, action="clarify",
+                    passed=False,
+                    layer=self.layer,
+                    action="clarify",
                     reason=f"flat top-3 scores (gap {gap:.3f}) — ambiguous match",
                 )
         return GuardrailResult(passed=True, layer=self.layer)
@@ -268,7 +334,9 @@ class OutputGuardrail:
         if not answer.text.strip():
             return (
                 GuardrailResult(
-                    passed=False, layer=self.layer, action="refuse",
+                    passed=False,
+                    layer=self.layer,
+                    action="refuse",
                     reason="empty generated answer",
                 ),
                 answer,
@@ -276,7 +344,9 @@ class OutputGuardrail:
         if len(answer.text) > self.max_answer_chars:
             return (
                 GuardrailResult(
-                    passed=False, layer=self.layer, action="refuse",
+                    passed=False,
+                    layer=self.layer,
+                    action="refuse",
                     reason=f"answer too long ({len(answer.text)} chars)",
                 ),
                 answer,
@@ -284,7 +354,9 @@ class OutputGuardrail:
         if not answer.cited_chunk_ids:
             return (
                 GuardrailResult(
-                    passed=False, layer=self.layer, action="refuse",
+                    passed=False,
+                    layer=self.layer,
+                    action="refuse",
                     reason="answer carries no citation",
                 ),
                 answer,
@@ -295,7 +367,9 @@ class OutputGuardrail:
             if not grounded:
                 return (
                     GuardrailResult(
-                        passed=False, layer=self.layer, action="refuse",
+                        passed=False,
+                        layer=self.layer,
+                        action="refuse",
                         reason=f"groundedness {score:.3f} below {self.groundedness_threshold}",
                     ),
                     answer,

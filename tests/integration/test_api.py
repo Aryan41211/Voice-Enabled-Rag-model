@@ -24,7 +24,10 @@ def _fake_pipeline():
 
         async def process_audio(self, path):
             return QueryResponse(
-                request_id="test", transcript="दिल्ली कहाँ है", answer="दिल्ली", timings_ms={}
+                request_id="test",
+                transcript="दिल्ली कहाँ है",
+                answer="दिल्ली",
+                timings_ms={},
             )
 
     return FakePipeline()

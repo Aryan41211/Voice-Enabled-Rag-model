@@ -36,9 +36,7 @@ def test_rerank_empty():
 def test_rerank_top_n(monkeypatch):
     reranker = CrossEncoderReranker(model_name="fake")
     monkeypatch.setattr(reranker, "_model", FakeCrossEncoder())
-    hits = [
-        _hit(f"c{i}", "दस्तावेज़" if i % 2 else "अन्य") for i in range(6)
-    ]
+    hits = [_hit(f"c{i}", "दस्तावेज़" if i % 2 else "अन्य") for i in range(6)]
     out = reranker.rerank("दस्तावेज़", hits, top_n=2)
     assert len(out) == 2
     assert all(h.score == 1.0 for h in out)

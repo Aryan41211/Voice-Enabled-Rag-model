@@ -27,9 +27,20 @@ from app.harness.schemas import STTError, Transcript
 DEFAULT_WS_URL = "wss://api.sarvam.ai/speech-to-text-realtime/ws"
 DEFAULT_REST_URL = "https://api.sarvam.ai/v1/speech-to-text"
 LANGUAGE_CODES = {
-    "hi": "hi-IN", "en": "en-IN", "bn": "bn-IN", "gu": "gu-IN", "kn": "kn-IN",
-    "ml": "ml-IN", "mr": "mr-IN", "ta": "ta-IN", "te": "te-IN", "pa": "pa-IN",
-    "or": "or-IN", "as": "as-IN", "ne": "ne-IN", "sa": "sa-IN",
+    "hi": "hi-IN",
+    "en": "en-IN",
+    "bn": "bn-IN",
+    "gu": "gu-IN",
+    "kn": "kn-IN",
+    "ml": "ml-IN",
+    "mr": "mr-IN",
+    "ta": "ta-IN",
+    "te": "te-IN",
+    "pa": "pa-IN",
+    "or": "or-IN",
+    "as": "as-IN",
+    "ne": "ne-IN",
+    "sa": "sa-IN",
 }
 AUDIO_CHUNK_BYTES = 2048
 
@@ -156,7 +167,9 @@ class SarvamSTT:
 
     async def _transcribe_rest(self, audio_path: str | Path) -> Transcript:
         headers = {"api-subscription-key": self.api_key}
-        files = {"file": (Path(audio_path).name, Path(audio_path).read_bytes(), "audio/wav")}
+        files = {
+            "file": (Path(audio_path).name, Path(audio_path).read_bytes(), "audio/wav")
+        }
         data = {
             "model": "saaras:v3",
             "language_code": self.language_code,
@@ -182,9 +195,7 @@ class SarvamSTT:
             raise STTError("Sarvam REST returned non-JSON response", retryable=True)
 
         text = (
-            body.get("transcript")
-            or (body.get("output") or {}).get("transcript")
-            or ""
+            body.get("transcript") or (body.get("output") or {}).get("transcript") or ""
         ).strip()
         if not text:
             raise STTError("Sarvam REST returned an empty transcript", retryable=True)
@@ -207,4 +218,6 @@ class FakeSTT:
     async def transcribe(self, audio_path: str | Path) -> Transcript:
         name = Path(audio_path).stem
         text = self.transcripts.get(name, "दिल्ली की राजधानी क्या है")
-        return Transcript(text=text, language="hi-IN", is_final=True, stt_latency_ms=1.0)
+        return Transcript(
+            text=text, language="hi-IN", is_final=True, stt_latency_ms=1.0
+        )

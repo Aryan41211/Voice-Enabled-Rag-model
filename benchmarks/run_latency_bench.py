@@ -23,7 +23,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.harness.pipeline import Pipeline
-from app.harness.schemas import Transcript
 
 
 def percentile(data: list[float], p: float) -> float:

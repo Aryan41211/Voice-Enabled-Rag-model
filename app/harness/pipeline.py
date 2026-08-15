@@ -130,9 +130,7 @@ class Pipeline:
         timings: dict = {}
         t0 = time.perf_counter()
         if self.stt is None:
-            return self._refuse(
-                "speech-to-text is not configured", request_id, timings
-            )
+            return self._refuse("speech-to-text is not configured", request_id, timings)
 
         transcript: Transcript | None = None
         last_error: str | None = None
@@ -158,11 +156,15 @@ class Pipeline:
                 request_id,
                 timings,
             )
-        return await self.query_async(transcript, request_id=request_id, timings=timings)
+        return await self.query_async(
+            transcript, request_id=request_id, timings=timings
+        )
 
     def query(self, text: str, request_id: str | None = None) -> QueryResponse:
         """Synchronous convenience wrapper for scripts / tests."""
-        return asyncio.run(self.query_async(Transcript(text=text), request_id=request_id))
+        return asyncio.run(
+            self.query_async(Transcript(text=text), request_id=request_id)
+        )
 
     async def query_async(
         self,
@@ -269,7 +271,6 @@ class Pipeline:
         if self._generation_breaker.is_open:
             return ExtractiveGenerator().generate(query, chunks)
 
-        last: GenerationError | None = None
         for attempt in range(self.settings.max_retries + 1):
             try:
                 answer = await asyncio.wait_for(
@@ -279,13 +280,12 @@ class Pipeline:
                 self._generation_breaker.record_success()
                 return answer
             except GenerationError as exc:
-                last = exc
                 self._generation_breaker.record_failure()
                 if not exc.retryable:
                     break
             except Exception as exc:
                 self._generation_breaker.record_failure()
-                last = GenerationError(f"unexpected generation error: {exc}", retryable=True)
+                print(f"[pipeline] unexpected generation error: {exc}")
             await self._backoff(attempt)
 
         return ExtractiveGenerator().generate(query, chunks)

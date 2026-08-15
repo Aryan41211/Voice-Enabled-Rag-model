@@ -22,7 +22,9 @@ def strategy_dir(lang: str, strategy: str, index_dir: str | Path | None = None) 
     return base / lang / strategy
 
 
-def load_chunks(lang: str, strategy: str, index_dir: str | Path | None = None) -> list[Chunk]:
+def load_chunks(
+    lang: str, strategy: str, index_dir: str | Path | None = None
+) -> list[Chunk]:
     path = strategy_dir(lang, strategy, index_dir) / "chunks.pkl"
     if not path.exists():
         raise IndexNotFoundError(

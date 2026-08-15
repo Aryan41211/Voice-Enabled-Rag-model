@@ -4,8 +4,30 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ruff
+        run: pip install ruff==0.6.9
+      - name: Lint
+        run: ruff check .
+      - name: Format check
+        run: ruff format --check .
+      - name: Ensure no local env files or key literals are tracked
+        run: |
+          test ! -f .env
+          test ! -f app/.env
+          if git grep -qE 'sk_[A-Za-z0-9]{20,}' -- ':!*.md'; then
+            echo "possible API key literal detected in tracked files" && exit 1
+          fi
+
   test:
     runs-on: ubuntu-latest
     steps:
@@ -17,3 +39,49 @@ jobs:
         run: pip install -r requirements-test.txt
       - name: Run test suite
         run: python -m pytest tests -p no:cacheprovider
+
+  e2e-smoke:
+    needs: [lint, test]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Cache HuggingFace model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-cache-e5-small-v1
+      - name: Install full dependencies
+        run: pip install -r requirements.txt
+      - name: Build tiny index (metadata strategy)
+        run: |
+          python -m app.ingestion.build_index --lang hi --strategies metadata \
+            --corpus-queries 20 --eval-queries 6 --max-rows 200
+      - name: Smoke query the pipeline
+        run: python scripts/ci_smoke.py
+      - name: Latency bench over gold queries
+        run: python benchmarks/run_latency_bench.py --n 5 --warmup 2
+
+  stt-integration:
+    needs: [lint, test]
+    if: github.event_name == 'workflow_dispatch' && secrets.SARVAM_API_KEY != ''
+    runs-on: ubuntu-latest
+    env:
+      SARVAM_API_KEY: ${{ secrets.SARVAM_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements-test.txt websockets==15.0.1 edge-tts
+      - name: Synthesize sample Hindi speech
+        run: |
+          python -m edge_tts --voice hi-IN-SwaraNeural \
+            --text "भारत का राष्ट्रीय पक्षी कौन सा है" --write-media /tmp/sample.mp3
+          ffmpeg -y -loglevel error -i /tmp/sample.mp3 -ar 16000 -ac 1 /tmp/sample_hi.wav
+      - name: Real Sarvam STT round-trip
+        run: python scripts/ci_stt.py /tmp/sample_hi.wav

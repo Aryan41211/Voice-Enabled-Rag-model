@@ -3,8 +3,6 @@
 import asyncio
 import wave
 
-import httpx
-import pytest
 
 import app.stt.client as sttmod
 from app.harness.schemas import STTError
@@ -30,8 +28,6 @@ class FakeWSResult:
 
 
 def _rest_client(handler):
-    import app.generation.generator as genmod  # reuse pattern via httpx patch
-
     orig = sttmod.httpx.AsyncClient
     sttmod.httpx.AsyncClient = lambda timeout=None: FakeAsyncClient(handler)
     return orig

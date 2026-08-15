@@ -94,7 +94,9 @@ class FakeClient:
 def _run_llm(events, api_key="k", cited_line=None):
     lines = list(events)
     if cited_line:
-        lines.append("data: " + '{"choices":[{"delta":{"content":"' + cited_line + '"}}]}')
+        lines.append(
+            "data: " + '{"choices":[{"delta":{"content":"' + cited_line + '"}}]}'
+        )
     lines.append("data: [DONE]")
 
     import app.generation.generator as genmod
@@ -103,7 +105,9 @@ def _run_llm(events, api_key="k", cited_line=None):
     genmod.httpx.AsyncClient = lambda timeout=None: FakeClient(lines)
     try:
         gen = LLMGenerator(api_key=api_key, model="m", base_url="http://fake")
-        return asyncio.run(gen.generate("राजधानी क्या है?", [_hit("c1", "पहला"), _hit("c2", "दूसरा")]))
+        return asyncio.run(
+            gen.generate("राजधानी क्या है?", [_hit("c1", "पहला"), _hit("c2", "दूसरा")])
+        )
     finally:
         genmod.httpx.AsyncClient = orig
 

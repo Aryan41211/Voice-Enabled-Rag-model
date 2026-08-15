@@ -64,7 +64,9 @@ class Embedder:
         )
         return np.asarray(emb, dtype=np.float32)
 
-    def encode_passages(self, texts: list[str], batch_size: int | None = None) -> np.ndarray:
+    def encode_passages(
+        self, texts: list[str], batch_size: int | None = None
+    ) -> np.ndarray:
         """Encode corpus passages with the ``passage:`` prefix if required."""
         prefixed = [f"passage: {t}" for t in texts] if self._prefix else list(texts)
         return self.encode(prefixed, batch_size=batch_size)

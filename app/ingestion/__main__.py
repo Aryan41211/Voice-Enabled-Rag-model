@@ -23,18 +23,21 @@ def cmd_download(args: argparse.Namespace) -> None:
 
 def cmd_explore(args: argparse.Namespace) -> None:
     ds = load(args.lang, args.split)
-    print(f"[dataset] {args.lang}/{args.split}: {len(ds)} rows, "
-          f"{ds.num_columns} columns")
+    print(
+        f"[dataset] {args.lang}/{args.split}: {len(ds)} rows, "
+        f"{ds.num_columns} columns"
+    )
     print(f"[dataset] features: {ds.features}")
     for i, ex in enumerate(ds.select(range(min(args.limit, len(ds))))):
-        print(f"\n--- row {i} (query_id={ex['query_id']}, "
-              f"type={ex['query_type']}, target_lang={ex['target_lang']}) ---")
+        print(
+            f"\n--- row {i} (query_id={ex['query_id']}, "
+            f"type={ex['query_type']}, target_lang={ex['target_lang']}) ---"
+        )
         print(f"query: {ex['query'][:200]}")
         print(f"Answer: {ex['Answer'][:200]}")
         passages = ex["passages"]
         n = len(passages["Translated_passages"])
-        print(f"passages: {n} total, selected="
-              f"{sum(passages['is_selected'])}")
+        print(f"passages: {n} total, selected=" f"{sum(passages['is_selected'])}")
         for j, (p, sel) in enumerate(
             zip(passages["Translated_passages"], passages["is_selected"])
         ):
@@ -51,17 +54,16 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_argument("-l", "--lang", default="hi", help=lang_help)
     subcommands = sub.add_subparsers(dest="command", required=True)
 
-    d = subcommands.add_parser("download",
-                               help="download dataset split(s) to data/raw")
-    d.add_argument("--split", nargs="+", default=["validation"],
-                   choices=SPLITS)
+    d = subcommands.add_parser("download", help="download dataset split(s) to data/raw")
+    d.add_argument("--split", nargs="+", default=["validation"], choices=SPLITS)
     d.set_defaults(func=cmd_download)
 
     e = subcommands.add_parser("explore", help="inspect schema and print examples")
     e.add_argument("--split", default="validation", choices=SPLITS)
     e.add_argument("--limit", type=int, default=3)
-    e.add_argument("--json", action="store_true",
-                   help="also dump first example as JSON")
+    e.add_argument(
+        "--json", action="store_true", help="also dump first example as JSON"
+    )
     e.set_defaults(func=cmd_explore)
 
     return sub

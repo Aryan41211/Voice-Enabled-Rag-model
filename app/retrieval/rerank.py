@@ -64,9 +64,7 @@ class CrossEncoderReranker:
         order = np.argsort(scores)[::-1]
         reranked = []
         for rank, idx in enumerate(order):
-            hit = hits[int(idx)].model_copy(
-                update={"score": float(scores[idx])}
-            )
+            hit = hits[int(idx)].model_copy(update={"score": float(scores[idx])})
             reranked.append(hit)
         if top_n is not None:
             reranked = reranked[:top_n]

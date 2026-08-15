@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import pickle
 import time
 from pathlib import Path
@@ -152,7 +151,6 @@ def build(
     skip_sparse: bool = False,
     model_name: str | None = None,
 ) -> None:
-    settings = get_settings()
     index_dir = Path(index_dir)
     embedder = Embedder(model_name=model_name) if not skip_dense else None
 
@@ -161,8 +159,7 @@ def build(
     examples = sample_queries(
         ds, corpus_queries, eval_queries, seed=seed, max_rows=max_rows
     )
-    print(f"[build] sampled {len(examples)} corpus queries "
-          f"({eval_queries} eval)")
+    print(f"[build] sampled {len(examples)} corpus queries " f"({eval_queries} eval)")
 
     write_eval_gold(examples, index_dir / lang / "eval_gold.jsonl", eval_queries)
 
@@ -184,7 +181,10 @@ def build(
         timings["chunking_s"] = chunk_s
 
         m = manifest(
-            strategy, chunks, timings, embedder.model_name if embedder else "skipped",
+            strategy,
+            chunks,
+            timings,
+            embedder.model_name if embedder else "skipped",
             len(examples),
         )
         with open(out_dir / "manifest.json", "w", encoding="utf-8") as fh:
@@ -205,8 +205,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--strategies", nargs="+", default=list(STRATEGIES))
     p.add_argument("--index-dir", default=None)
     p.add_argument("--seed", type=int, default=DEFAULT_SEED)
-    p.add_argument("--max-rows", type=int, default=None,
-                   help="cap dataset rows scanned (fast iteration)")
+    p.add_argument(
+        "--max-rows",
+        type=int,
+        default=None,
+        help="cap dataset rows scanned (fast iteration)",
+    )
     p.add_argument("--model", default=None, help="override EMBEDDING_MODEL")
     p.add_argument("--skip-dense", action="store_true")
     p.add_argument("--skip-sparse", action="store_true")

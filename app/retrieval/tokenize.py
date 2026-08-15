@@ -11,12 +11,12 @@ from __future__ import annotations
 import re
 
 _SCRIPT_BLOCKS = (
-    "\u0900-\u0DFF"  # major Indic blocks (Devanagari..Sinhala)
-    "\uA8E0-\uA8FF"  # Devanagari extended
-    "\u0600-\u06FF"  # Arabic (Urdu)
-    "\u0750-\u077F"  # Arabic supplement
-    "\u08A0-\u08FF"  # Arabic extended-A
-    "\u0300-\u036F"  # combining diacritical marks
+    "\u0900-\u0dff"  # major Indic blocks (Devanagari..Sinhala)
+    "\ua8e0-\ua8ff"  # Devanagari extended
+    "\u0600-\u06ff"  # Arabic (Urdu)
+    "\u0750-\u077f"  # Arabic supplement
+    "\u08a0-\u08ff"  # Arabic extended-A
+    "\u0300-\u036f"  # combining diacritical marks
 )
 
 _WORD_CHAR = re.compile(rf"[\w{_SCRIPT_BLOCKS}]")

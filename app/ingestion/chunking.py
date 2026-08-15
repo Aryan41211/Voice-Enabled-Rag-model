@@ -25,7 +25,7 @@ from __future__ import annotations
 import re
 from typing import Protocol
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 STRATEGIES = ("fixed", "semantic", "sentence_window", "metadata", "hierarchical")
 
@@ -151,9 +151,7 @@ class SemanticChunker:
         if self.embedder is None:
             return [list(sentences)]
         vecs = self.embedder.encode(sentences)
-        return group_by_similarity(
-            sentences, vecs, self.threshold, self.max_sentences
-        )
+        return group_by_similarity(sentences, vecs, self.threshold, self.max_sentences)
 
     def split_text(self, text: str) -> list[str]:
         sentences = split_sentences(text)

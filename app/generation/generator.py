@@ -17,7 +17,6 @@ from __future__ import annotations
 import json
 import re
 import time
-from typing import AsyncIterator
 
 import httpx
 
@@ -88,7 +87,9 @@ class LLMGenerator:
         self.model = model or settings.llm_model or "llama-3.3-70b-versatile"
         self.base_url = (base_url or settings.llm_base_url).rstrip("/")
         self.max_tokens = max_tokens or settings.llm_max_tokens
-        self.temperature = temperature if temperature is not None else settings.llm_temperature
+        self.temperature = (
+            temperature if temperature is not None else settings.llm_temperature
+        )
         self.timeout_s = timeout_s or settings.llm_timeout_s
 
     @property
@@ -99,9 +100,7 @@ class LLMGenerator:
 
     @staticmethod
     def _messages(query: str, chunks: list[RetrievedChunk]) -> list[dict]:
-        numbered = "\n\n".join(
-            f"[{i + 1}] {c.text}" for i, c in enumerate(chunks)
-        )
+        numbered = "\n\n".join(f"[{i + 1}] {c.text}" for i, c in enumerate(chunks))
         user_prompt = (
             f"Question: {query}\n\nPassages:\n{numbered}\n\n"
             "Answer the question using only the passages above."
@@ -119,9 +118,7 @@ class LLMGenerator:
         indices = [int(i) for i in re.split(r"\s*,\s*", match.group(1)) if i]
         return [chunks[i - 1].chunk_id for i in indices if 0 < i <= len(chunks)]
 
-    async def generate(
-        self, query: str, chunks: list[RetrievedChunk]
-    ) -> Answer:
+    async def generate(self, query: str, chunks: list[RetrievedChunk]) -> Answer:
         if not self.api_key:
             raise GenerationError("LLM provider selected but no API key configured")
         if not chunks:
@@ -154,7 +151,7 @@ class LLMGenerator:
                     async for line in resp.aiter_lines():
                         if not line.startswith("data:"):
                             continue
-                        data = line[len("data:"):].strip()
+                        data = line[len("data:") :].strip()
                         if data == "[DONE]":
                             break
                         try:
