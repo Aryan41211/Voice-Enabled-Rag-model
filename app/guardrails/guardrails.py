@@ -31,16 +31,28 @@ from app.ingestion.embed import Embedder
 
 UNSAFE_KEYWORDS = [
     # violence / weapons
-    "हत्या", "मारना", "बम बनाना", "हिंसा", "काटना", "गोली", "बंदूक",
+    "हत्या", "मारना", "बम", "बम बनाना", "हिंसा", "काटना", "गोली", "बंदूक",
     "kill", "murder", "bomb", "violence", "weapon",
     # self-harm
-    "आत्महत्या", "खुदकुशी", "खुद को मार", "suicide", "self harm",
+    "आत्महत्या", "खुदकुशी", "खुद को मार", "खुद को नुकसान", "खुद को चोट",
+    "अपने आप को नुकसान", "मुझे नुकसान पहुंचाने", "suicide", "self harm",
+    "hurt myself", "cut myself",
     # hate speech
     "नफरत", "जातिवाद", "नस्लवाद", "hate speech",
     # illegal drugs
     "ड्रग्स कैसे बनाएं", "नशीला पदार्थ", "how to make drugs", "cocaine",
     # explicit sexual content
     "अश्लील", "सेक्स कैसे", "porn", "nsfw",
+]
+
+OFF_TOPIC_KEYWORDS = [
+    # gambling / betting / match-fixing
+    "बेटिंग", "जुआ", "सट्टा", "कैसीनो", "बाज़ी", "लॉटरी", "मटका",
+    "gambling", "betting", "casino", "lottery", "poker",
+    # speculative trading / crypto
+    "क्रिप्टो", "बिटकॉइन", "स्टॉक टिप्स", "ट्रेडिंग", "bitcoin", "crypto",
+    # dating / adult services
+    "डेटिंग", "शादी का साथी", "dating", "hookup",
 ]
 
 REFUSAL_SAFE = (
@@ -64,9 +76,10 @@ AMBIGUOUS_TEMPLATE = (
 
 DEFAULT_MIN_TOP_SCORE = 0.40
 DEFAULT_MIN_MARGIN = 0.03
-DEFAULT_AMBIGUOUS_GAP = 0.02
+DEFAULT_AMBIGUOUS_GAP = 0.0  # disabled: gap distributions overlap (see EVALUATION.md §6)
 DEFAULT_MIN_CONFIDENCE = 0.5
 DEFAULT_MIN_LENGTH = 3
+DEFAULT_MIN_TOKENS = 2
 DEFAULT_OFF_TOPIC_THRESHOLD = 0.30
 DEFAULT_GROUNDEDNESS_THRESHOLD = 0.50
 DEFAULT_MAX_ANSWER_CHARS = 2000
@@ -81,6 +94,14 @@ def _contains_unsafe(text: str) -> bool:
     return False
 
 
+def _contains_off_topic(text: str) -> bool:
+    lowered = text.lower()
+    for keyword in OFF_TOPIC_KEYWORDS:
+        if keyword in lowered:
+            return True
+    return False
+
+
 class InputGuardrail:
     layer = "input"
 
@@ -88,8 +109,10 @@ class InputGuardrail:
         self,
         embedder: Embedder | None = None,
         min_length: int = DEFAULT_MIN_LENGTH,
+        min_tokens: int = DEFAULT_MIN_TOKENS,
         min_confidence: float = DEFAULT_MIN_CONFIDENCE,
         off_topic_threshold: float = DEFAULT_OFF_TOPIC_THRESHOLD,
+        use_embedding_offtopic: bool = False,
         lang: str | None = None,
         index_dir: str | Path | None = None,
         reference_queries: list[str] | None = None,
@@ -97,8 +120,10 @@ class InputGuardrail:
         settings = get_settings()
         self.embedder = embedder
         self.min_length = min_length
+        self.min_tokens = min_tokens
         self.min_confidence = min_confidence
         self.off_topic_threshold = off_topic_threshold
+        self.use_embedding_offtopic = use_embedding_offtopic
         self.lang = lang or settings.data_lang
         self.index_dir = Path(index_dir or settings.index_dir)
         self.reference_queries = reference_queries
@@ -142,6 +167,11 @@ class InputGuardrail:
                 passed=False, layer=self.layer, action="clarify",
                 reason="transcript too short to be a real query",
             )
+        if len(text.split()) < self.min_tokens:
+            return GuardrailResult(
+                passed=False, layer=self.layer, action="clarify",
+                reason="transcript has too few words to be a real query",
+            )
         if transcript.confidence < self.min_confidence:
             return GuardrailResult(
                 passed=False, layer=self.layer, action="clarify",
@@ -152,7 +182,12 @@ class InputGuardrail:
                 passed=False, layer=self.layer, action="refuse",
                 reason="unsafe content detected",
             )
-        if self.embedder is not None or self._reference_path_exists():
+        if _contains_off_topic(text):
+            return GuardrailResult(
+                passed=False, layer=self.layer, action="refuse",
+                reason="off-topic domain detected",
+            )
+        if self.use_embedding_offtopic:
             centroid = self._reference_centroid()
             if centroid.any():
                 if self.embedder is None:

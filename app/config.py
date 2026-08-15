@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     sarvam_api_key: str = ""
     stt_timeout_s: float = 10.0
 
+    # Retrieval (generous: covers one-time embedder cold load)
+    retrieval_timeout_s: float = 30.0
+
     # Harness
     max_retries: int = 2
     retry_base_delay_s: float = 0.5

@@ -6,8 +6,8 @@ The brief: *"Show that your system knows when not to answer, not just how to ans
 
 | Check | Method | Action on fail |
 |---|---|---|
-| Empty/garbage transcript | Min length + STT confidence score threshold | Ask user to repeat, don't call retrieval |
-| Off-topic query | Lightweight zero-shot classifier or embedding-similarity to a small "in-domain topic" reference set | Respond: "That's outside what I can answer from this dataset" |
+| Empty/garbage transcript | Min length + token count + STT confidence threshold | Ask user to repeat, don't call retrieval |
+| Off-topic query | Domain keyword gate (gambling/crypto/dating/etc.) — measured: embedding similarity to an in-domain centroid does **not** separate off-topic queries (all score 0.83–0.89), see EVALUATION.md §6 | Respond: "That's outside what I can answer from this dataset" |
 | Unsafe/inappropriate input | Keyword + moderation-classifier check | Refuse with a fixed safe response, log the event |
 | Wrong/unsupported language | Language-ID on transcript vs. supported index languages | Ask user to switch language or auto-route to the matching language index |
 
@@ -15,8 +15,8 @@ The brief: *"Show that your system knows when not to answer, not just how to ans
 
 | Check | Method | Action on fail |
 |---|---|---|
-| No relevant results | Top retrieval score below similarity threshold | Skip generation entirely → "I couldn't find relevant information for that" |
-| Low retrieval confidence | Score gap between top-1 and top-k is too flat (ambiguous match) | Ask a clarifying question instead of guessing |
+| No relevant results | Isolation margin (top-1 vs rank-20 cosine, `min_margin=0.03`) calibrated on eval gold | Skip generation entirely → "I couldn't find relevant information for that" |
+| Low retrieval confidence | Score gap between top-1 and top-k too flat — measured too noisy, **disabled by default** (see EVALUATION.md §6) | Ask a clarifying question instead of guessing |
 
 ## Layer 3 — Output Guardrails (post-generation, before returning to user)
 

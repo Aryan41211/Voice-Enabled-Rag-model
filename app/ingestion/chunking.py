@@ -82,6 +82,25 @@ def _cosine(a: "object", b: "object") -> float:
     return float(np.dot(a, b) / denom)
 
 
+def group_by_similarity(
+    sentences: list[str],
+    vectors: "object",
+    threshold: float,
+    max_sentences: int,
+) -> list[list[str]]:
+    """Merge adjacent sentences while consecutive cosine sim >= threshold."""
+    if not sentences:
+        return []
+    groups: list[list[str]] = [[sentences[0]]]
+    for i in range(1, len(sentences)):
+        sim = _cosine(vectors[i - 1], vectors[i])
+        if sim >= threshold and len(groups[-1]) < max_sentences:
+            groups[-1].append(sentences[i])
+        else:
+            groups.append([sentences[i]])
+    return groups
+
+
 # --------------------------------------------------------------------------
 # strategies
 # --------------------------------------------------------------------------
@@ -132,14 +151,9 @@ class SemanticChunker:
         if self.embedder is None:
             return [list(sentences)]
         vecs = self.embedder.encode(sentences)
-        groups: list[list[str]] = [[sentences[0]]]
-        for i in range(1, len(sentences)):
-            sim = _cosine(vecs[i - 1], vecs[i])
-            if sim >= self.threshold and len(groups[-1]) < self.max_sentences:
-                groups[-1].append(sentences[i])
-            else:
-                groups.append([sentences[i]])
-        return groups
+        return group_by_similarity(
+            sentences, vecs, self.threshold, self.max_sentences
+        )
 
     def split_text(self, text: str) -> list[str]:
         sentences = split_sentences(text)
@@ -313,11 +327,88 @@ def chunk_examples(
     strategy: str,
     embedder: Embedder | None = None,
     max_examples: int | None = None,
+    semantic_threshold: float = 0.75,
+    semantic_max_sentences: int = 8,
 ) -> list[Chunk]:
-    """Apply ``chunk_example`` across examples, optionally capping the count."""
+    """Apply ``chunk_example`` across examples, optionally capping the count.
+
+    The ``semantic`` strategy uses a single batched embedding call across all
+    sentences (much faster than one ``encode`` call per passage).
+    """
+    if strategy == "semantic" and embedder is not None:
+        return _chunk_examples_semantic_batched(
+            examples,
+            embedder,
+            max_examples=max_examples,
+            threshold=semantic_threshold,
+            max_sentences=semantic_max_sentences,
+        )
     out: list[Chunk] = []
     for i, ex in enumerate(examples):
         if max_examples is not None and i >= max_examples:
             break
         out.extend(chunk_example(ex, strategy, embedder=embedder))
+    return out
+
+
+def _chunk_examples_semantic_batched(
+    examples: list[dict],
+    embedder: Embedder,
+    max_examples: int | None = None,
+    threshold: float = 0.75,
+    max_sentences: int = 8,
+) -> list[Chunk]:
+    """Semantic chunking with one batched encode for all sentences."""
+    items: list[tuple[int, int, str]] = []
+    for i, ex in enumerate(examples):
+        if max_examples is not None and i >= max_examples:
+            break
+        passages = ex["passages"]["Translated_passages"]
+        for pidx, passage in enumerate(passages):
+            for sent in split_sentences(passage):
+                items.append((i, pidx, sent))
+    if not items:
+        return []
+
+    texts = [t for _, _, t in items]
+    vecs = embedder.encode(texts)
+
+    out: list[Chunk] = []
+    pos = 0
+    cursor = 0
+    n = len(items)
+    while cursor < n:
+        i, pidx, _ = items[cursor]
+        ex = examples[i]
+        selected = ex["passages"]["is_selected"]
+        is_sel = int(selected[pidx]) if pidx < len(selected) else 0
+        lang = ex["target_lang"]
+        qid = ex["query_id"]
+        prefix = f"{lang}:semantic:{qid}:{pidx}"
+
+        pass_sents: list[str] = []
+        pass_vecs: list[object] = []
+        while cursor < n and items[cursor][0] == i and items[cursor][1] == pidx:
+            pass_sents.append(items[cursor][2])
+            pass_vecs.append(vecs[cursor])
+            cursor += 1
+
+        for group in group_by_similarity(
+            pass_sents, pass_vecs, threshold, max_sentences
+        ):
+            text = " ".join(group)
+            out.append(
+                Chunk(
+                    chunk_id=f"{prefix}:{pos}",
+                    text=text,
+                    context=text,
+                    source_query_id=qid,
+                    passage_index=pidx,
+                    language=lang,
+                    strategy="semantic",
+                    position=pos,
+                    passage_is_selected=is_sel,
+                )
+            )
+            pos += 1
     return out

@@ -41,11 +41,7 @@ class AdversarialEmbedder:
 
 
 def _input_guardrail():
-    return InputGuardrail(
-        embedder=AdversarialEmbedder(),
-        index_dir=None,
-        off_topic_threshold=0.0,
-    )
+    return InputGuardrail()
 
 
 def _chunk(cid, text, score):

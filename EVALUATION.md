@@ -71,3 +71,16 @@ Instead we use an *isolation margin* = top-1 score − score at rank 20
 Threshold `min_margin = 0.03` (below → refuse "no relevant information") cleanly
 separates the two populations on this sample; it is configurable in
 `RetrievalGuardrail`.
+
+### What does NOT work (measured, so we don't pretend otherwise)
+
+* **Embedding similarity to a centroid of in-domain queries is useless for
+  off-topic detection.** Every Hindi query — gambling questions, garbage like
+  `xyz`, and legit questions alike — scores 0.83–0.89 against the centroid of
+  200 in-domain queries. The centroid collapses to a generic "Hindi question"
+  direction. Off-topic handling therefore uses a **topic keyword gate**
+  (gambling/crypto/dating domains) instead of embeddings.
+* **Top-1 vs top-3 score gap is too noisy for an "ambiguous" refusal.**
+  Hit vs miss gap distributions overlap almost completely (hit median 0.020,
+  miss 0.011, both down to ~0.001). The ambiguity check is **disabled by
+  default** (`ambiguous_gap = 0.0`); the isolation margin is the real signal.

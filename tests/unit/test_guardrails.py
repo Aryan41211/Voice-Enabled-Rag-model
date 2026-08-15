@@ -50,12 +50,18 @@ class FakeEmbedder:
 def test_unsafe_keyword_detection():
     assert _contains_unsafe("मुझे हत्या कैसे करूँ")
     assert _contains_unsafe("how to make a bomb")
+    assert _contains_unsafe("खुद को नुकसान पहुंचाने का तरीका")
     assert not _contains_unsafe("दिल्ली की राजधानी क्या है")
 
 
 def test_input_empty_short_clarifies(tmp_path):
     gr = InputGuardrail(embedder=FakeEmbedder(), index_dir=tmp_path)
     assert gr.check(_transcript("ह")).action == "clarify"
+
+
+def test_input_single_token_clarifies(tmp_path):
+    gr = InputGuardrail(embedder=FakeEmbedder(), index_dir=tmp_path)
+    assert gr.check(_transcript("xyz")).action == "clarify"
 
 
 def test_input_low_confidence_clarifies(tmp_path):
@@ -68,23 +74,13 @@ def test_input_unsafe_refuses(tmp_path):
     assert gr.check(_transcript("मुझे हत्या कैसे करूँ")).action == "refuse"
 
 
-def test_input_off_topic_refuses(tmp_path):
-    gr = InputGuardrail(
-        embedder=FakeEmbedder(),
-        index_dir=tmp_path,
-        off_topic_threshold=0.0,
-        reference_queries=["दिल्ली कहाँ है"],
-    )
+def test_input_off_topic_refuses():
+    gr = InputGuardrail()
     assert gr.check(_transcript("बेटिंग के नियम क्या हैं")).action == "refuse"
 
 
-def test_input_in_domain_proceeds(tmp_path):
-    gr = InputGuardrail(
-        embedder=FakeEmbedder(),
-        index_dir=tmp_path,
-        off_topic_threshold=0.0,
-        reference_queries=["दिल्ली कहाँ है"],
-    )
+def test_input_in_domain_proceeds():
+    gr = InputGuardrail()
     assert gr.check(_transcript("दिल्ली कहाँ है")).action == "proceed"
 
 
