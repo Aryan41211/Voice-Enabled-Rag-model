@@ -149,9 +149,9 @@ def test_circuit_breaker_opens_and_recovers():
 
 
 def test_circuit_breaker_half_open_after_reset():
-    cb = CircuitBreaker(threshold=1, reset_s=0.05)
+    cb = CircuitBreaker(threshold=1, reset_s=0.2)
     cb.record_failure()
     assert cb.is_open
     import time
-    time.sleep(0.06)
+    time.sleep(0.3)
     assert not cb.is_open
