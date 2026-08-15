@@ -12,8 +12,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 import time
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.config import get_settings
 from app.ingestion.embed import Embedder
@@ -88,6 +92,8 @@ def run(
     index_dir = Path(index_dir)
     gold_records = load_eval_gold(lang, index_dir)
     embedder = Embedder(model_name=model_name)
+    # warm up the model so the first timed query doesn't pay load cost
+    embedder.encode_query("warmup")
 
     results = {}
     for strategy in strategies:
