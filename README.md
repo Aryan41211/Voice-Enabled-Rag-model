@@ -72,47 +72,67 @@ ds = load_dataset("ai4bharat/MSMARCO-XI", "hi", split="train")  # swap "hi" for 
 ## 5. Quick Start
 
 ```bash
-git clone <your-repo-url>
-cd voice-rag
-cp .env.example .env        # add SARVAM_API_KEY / ELEVENLABS_API_KEY, LLM key, vector DB config
-docker compose up --build   # or: pip install -r requirements.txt && python -m app.main
+git clone https://github.com/Aryan41211/Voice-Enabled-Rag-model.git
+cd "Voice-Enabled Rag model"
+cp .env.example .env        # fill SARVAM_API_KEY (STT) and optionally a Groq/OpenAI key
 ```
+
+**Option A — Docker (recommended):**
+```bash
+docker compose up --build        # builds index on first boot, serves API on :8000
+```
+
+**Option B — local:**
+```bash
+pip install -r requirements.txt
+python -m app.ingestion.build_index --lang hi --strategies metadata   # offline, once
+python -m uvicorn app.api.server:app --host 0.0.0.0 --port 8000
+```
+
+Then:
+```bash
+curl http://localhost:8000/health
+curl -X POST http://localhost:8000/query -H "Content-Type: application/json" \
+  -d '{"text": "भारत का राष्ट्रीय पक्षी कौन सा है", "language": "hi"}'
+```
+Voice: `POST /v1/voice` with a multipart `audio` WAV file. Open http://localhost:8000/docs for the interactive Swagger UI.
 
 ## 6. Tech Stack (proposed — adjust to your team's comfort)
 
 | Layer | Choice | Why |
 |---|---|---|
-| STT | Sarvam `saaras:v3-realtime` (WebSocket) | Built for Indian languages, <150ms TTFT claimed, matches MSMARCO-XI's Indic focus |
-| Embeddings | `bge-m3` or `intfloat/multilingual-e5-large` | Strong multilingual/Indic retrieval performance |
-| Vector DB | FAISS (HNSW) locally, or Qdrant if you want a server + filtering | FAISS = fastest for a hackathon-sized corpus; Qdrant = easier metadata filtering + persistence |
-| Sparse retrieval | BM25 (`rank_bm25` or Elasticsearch) | For hybrid retrieval, keyword-exact matches embeddings miss |
-| Re-ranker | Cross-encoder (`bge-reranker`) — optional, adds latency | Only if you have budget left in the 200ms window |
-| Generation | Fast-inference LLM (Groq-hosted Llama/Mixtral, or Sarvam LLM) | Needed to have any shot at low TTFT |
-| Guardrails | Rule-based topic classifier + embedding-similarity grounding check + NLI entailment | See GUARDRAILS.md |
-| Harness | Custom orchestrator (Python `asyncio` or LangGraph/LlamaIndex workflow) | Structured I/O, retries, timeouts, fallbacks |
+| STT | Sarvam `saaras:v3-realtime` (WebSocket, REST fallback) | Built for Indian languages, matches MSMARCO-XI's Indic focus |
+| Embeddings | `intfloat/multilingual-e5-small` (384-d) | Strong multilingual/Indic retrieval, fast on CPU/RTX |
+| Vector DB | FAISS in-process | Fastest for a hackathon-sized corpus; no network hop |
+| Chunking | **metadata**-aware passage chunks (measured winner) | Best MRR/R@5 in our 300-query eval — see EVALUATION.md |
+| Sparse retrieval | BM25 (`rank_bm25`) — evaluated, **disabled** in prod | Hybrid (RRF) *hurt* retrieval quality on Hindi in our eval |
+| Re-ranker | `BAAI/bge-reranker-v2-m3` — optional toggle, **not** in live path | +8.4pts R@5 but adds ~345ms → blows the 200ms budget |
+| Generation | Extractive (offline default) or streaming LLM via Groq/OpenAI | Extractive = always under budget; LLM = richer answers with TTFT tracking |
+| Guardrails | 3-layer rule + embedding-similarity stack, calibrated on real data | See GUARDRAILS.md |
+| Harness | Custom `asyncio` orchestrator | Structured I/O, retries, timeouts, fallbacks, circuit breaker |
 
 ## 7. Repo Structure (suggested)
 
 ```
 voice-rag/
 ├── app/
-│   ├── stt/                # Sarvam/ElevenLabs client + streaming handler
-│   ├── ingestion/           # chunking strategies, embedding, index build
-│   ├── retrieval/           # dense + sparse + hybrid + rerank
-│   ├── guardrails/          # query & answer guardrails
-│   ├── generation/          # LLM client, prompt templates
-│   ├── harness/             # orchestrator: retries, timeouts, structured I/O, tracing
-│   └── main.py
+│   ├── stt/                # Sarvam client (WS realtime + REST fallback), FakeSTT
+│   ├── ingestion/          # chunking strategies, embedding, index build
+│   ├── retrieval/          # dense + sparse + hybrid + rerank
+│   ├── guardrails/         # 3-layer guardrail stack
+│   ├── generation/         # extractive + LLM generators
+│   ├── harness/            # orchestrator: retries, timeouts, circuit breaker, schemas
+│   └── api/server.py       # FastAPI: /health, /query, /v1/voice
 ├── benchmarks/
 │   ├── run_latency_bench.py
+│   ├── run_retrieval_eval.py
 │   └── results/
-├── data/                    # cached MSMARCO-XI subset + built index
-├── docs/                    # this folder
-├── tests/
-├── docker-compose.yml
+├── data/                   # cached MSMARCO-XI subset + built index
+├── scripts/entrypoint.py   # container entrypoint (builds index if missing)
+├── tests/                  # 88 passing: unit + integration + adversarial
+├── Dockerfile / docker-compose.yml / .github/workflows/ci.yml
 ├── requirements.txt
-├── .env.example
-└── LICENSE
+└── .env.example
 ```
 
 ## 8. Team

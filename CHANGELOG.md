@@ -16,13 +16,23 @@ All notable changes to this project during the HH Goa 2026 sprint. Format loosel
 - 3-layer guardrail stack (`app/guardrails/`): input (garbage/unsafe/off-topic), retrieval (score floor + isolation margin), output (citation + groundedness)
 - Guardrail adversarial test set (`tests/adversarial/`)
 
-### Planned
-- STT integration (Sarvam `saaras:v3-realtime`)
-- Generation with forced citation + streaming TTFT measurement
-- 3-layer guardrail stack
-- Harness with retries/timeouts/circuit breaker
-- Latency benchmark run on ≥100 real queries
-- Live deployment
+---
+
+## [0.1.0] - 2026-08-15
+### Added
+- STT client (`app/stt/client.py`): Sarvam WebSocket realtime (`saaras:v3-realtime`) with REST fallback (`saaras:v3`), WAV→PCM conversion, language-code map; `FakeSTT` for keyless dev
+- Harness orchestrator (`app/harness/pipeline.py`): typed I/O, per-stage retries + backoff, circuit breaker, timeouts, refusal→`refused:true` mapping, LLM→extractive degradation, `warmup()` for latency-stable measurement
+- FastAPI server (`app/api/server.py`): `GET /health`, `POST /query` (text), `POST /v1/voice` (WAV audio → STT → pipeline), startup warm-up, Swagger UI
+- Retrieval guardrail calibrated on real data: isolation margin (top1 − rank-20 cosine) ≥ 0.03 → refuse; ambiguity-gap check disabled (no signal); embedding-centroid off-topic check removed (provably useless) in favor of keyword gate
+- Expanded unsafe-keyword coverage incl. self-harm variants + standalone `बम`
+- Latency benchmark (`benchmarks/run_latency_bench.py`) + results: retrieval P50 15.2 / P70 19.4 / P100 40.2 ms on 110 real queries → LATENCY_BENCHMARK.md
+- Dockerfile + docker-compose.yml + `scripts/entrypoint.py` (auto-builds index on first boot) + `.dockerignore`
+- GitHub Actions CI (`ci.yml`) running the full 88-test suite on Ubuntu (no model downloads in tests)
+- API tests (`tests/integration/test_api.py`), eval script bootstrap + warm-up fix
+
+### Notes
+- Chosen stack: `metadata` chunking + dense-only retrieval (hybrid/RRF hurt Hindi retrieval; reranker excluded — too slow for budget)
+- Live STT/hosted-LLM paths are key-gated (`STT_PROVIDER`, `LLM_PROVIDER`); extractive generation is the offline default
 
 ---
 

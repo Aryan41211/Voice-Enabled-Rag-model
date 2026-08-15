@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # STT
     sarvam_api_key: str = ""
     stt_timeout_s: float = 10.0
+    stt_provider: str = "sarvam"  # sarvam | fake (keyless local dev)
+
+    # Index / pipeline serving
+    data_strategy: str = "metadata"
 
     # Retrieval (generous: covers one-time embedder cold load)
     retrieval_timeout_s: float = 30.0

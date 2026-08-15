@@ -12,7 +12,7 @@ machine-checkable status.
 - [x] Repo scaffold, `.env.example`, `.gitignore`, requirements
 - [x] Language picked (`hi`) + MSMARCO-XI downloaded (`data/raw/validation/hinval.parquet`, 97,941 rows) & schema explored
 - [x] Dataset loader + CLI + unit tests (`app/ingestion/dataset.py`)
-- [ ] CI lint/test skeleton (GitHub Actions)
+- [x] CI test skeleton (GitHub Actions) — `.github/workflows/ci.yml`
 
 ## Day 2 — Chunking & Indexing
 - [x] Pipeline schemas per API.md (`app/harness/schemas.py`)
@@ -33,15 +33,15 @@ machine-checkable status.
 - [x] Retrieval guardrail threshold calibrated on eval gold (margin ≥ 0.03 → refuse) → EVALUATION.md
 
 ## Day 5 — Harness & STT Integration
-- [ ] Orchestrator: typed I/O, timeouts, retries, circuit breaker, tracing
-- [ ] STT client (Sarvam) + mock tests + fallback
-- [ ] End-to-end text pipeline wired
+- [x] Orchestrator: typed I/O, timeouts, retries, circuit breaker, tracing (`app/harness/pipeline.py`)
+- [x] STT client (Sarvam WS + REST fallback) + FakeSTT + tests (`app/stt/client.py`)
+- [x] End-to-end text pipeline wired + smoke-tested
 
 ## Day 6 — Latency Benchmark, Deployment & Hardening
-- [ ] P50/P70/P100 on >=100 queries → LATENCY_BENCHMARK.md
-- [ ] FastAPI backend + minimal frontend
-- [ ] Dockerfile + docker-compose.yml
-- [ ] Deploy live link (needs cloud credentials)
+- [x] P50/P70/P100 on 110 real queries → LATENCY_BENCHMARK.md (retrieval P50 15.2 / P70 19.4 / P100 40.2 ms)
+- [x] FastAPI backend (`app/api/server.py`: /health, /query, /v1/voice) + API tests
+- [x] Dockerfile + docker-compose.yml + entrypoint + .dockerignore + CI
+- [ ] Deploy live link (needs cloud credentials + SARVAM_API_KEY)
 
 ## Day 7-8 — Demo Prep & Submission
 - [ ] Real numbers in EVALUATION.md / LATENCY_BENCHMARK.md
@@ -49,4 +49,4 @@ machine-checkable status.
 
 ## Environment
 - GPU: RTX 4050 Laptop (CUDA available), 16.8 GB RAM
-- Embedding model: TBD (e5-small for speed vs bge-m3 for quality)
+- Embedding model: `intfloat/multilingual-e5-small` (384-d) — speed/quality sweet spot for a hackathon corpus

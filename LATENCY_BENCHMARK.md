@@ -20,20 +20,21 @@
 ## Reporting Template
 
 ```
-Benchmark run: <date>
-Queries: <N> sampled from MSMARCO-XI (<language>), seed=<seed>
-Environment: <local / cloud, hardware spec>
+Benchmark run: 2026-08-15
+Queries: 110 sampled from MSMARCO-XI (hi/validation, eval_gold), seed=42
+Environment: local — RTX 4050 Laptop GPU, 16.8 GB RAM, Windows 11
+Generation: extractive (offline, no network); 16/110 queries refused by guardrails
 
-Retrieval-only pipeline (embed → search → fusion → rerank → guardrails):
-  P50: __ ms   P70: __ ms   P100: __ ms
+Retrieval-only pipeline (embed → search → guardrails):
+  P50: 15.2 ms   P70: 19.4 ms   P100: 40.2 ms
 
 Retrieval + generation TTFT:
-  P50: __ ms   P70: __ ms   P100: __ ms
+  P50: 15.2 ms   P70: 19.4 ms   P100: 40.2 ms
 
 Retrieval + full generation (for transparency, not claimed as "the 200ms number"):
-  P50: __ ms   P70: __ ms   P100: __ ms
+  P50: 15.0 ms   P70: 19.1 ms   P100: 30.7 ms
 
-STT (separate stage):
+STT (separate stage — not measured; no Sarvam key on dev machine):
   P50: __ ms   P70: __ ms   P100: __ ms
 ```
 

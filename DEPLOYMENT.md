@@ -16,19 +16,24 @@ The brief requires a **live working link**. Latency matters, so hosting choices 
 
 ```bash
 SARVAM_API_KEY=
-ELEVENLABS_API_KEY=
-LLM_API_KEY=
-LLM_PROVIDER=groq   # or your chosen fast-inference provider
-VECTOR_INDEX_PATH=./data/index
-EMBEDDING_MODEL=BAAI/bge-m3
-LOG_LEVEL=INFO
+STT_PROVIDER=sarvam          # sarvam | fake (keyless dev)
+LLM_PROVIDER=extractive      # extractive | groq | openai
+GROQ_API_KEY=
+OPENAI_API_KEY=
+DATA_STRATEGY=metadata       # measured best chunking strategy
+DATA_LANG=hi
+RETRIEVAL_TIMEOUT_S=30
+PORT=8000
 ```
 
+## Containerized Deploy
+The repo ships `Dockerfile` + `docker-compose.yml`. `scripts/entrypoint.py` checks for the built index and rebuilds it on first boot (only the selected `DATA_STRATEGY`), so `docker compose up --build` is the fastest path to a live link. Pre-build the index locally and bake it into the image for faster startup — index build time is not part of your latency budget, but startup time matters for demo reliability.
+
 ## Steps
-1. Build the offline index (`app/ingestion/build_index.py`) and commit the built index artifact (or a script that rebuilds it on deploy — index build time is not part of your latency budget, but startup time matters for demo reliability).
-2. Containerize the backend (`Dockerfile` + `docker-compose.yml` for local dev parity).
-3. Deploy backend to your chosen host; confirm WebSocket support if you're streaming STT/generation (not all free-tier PaaS hosts support long-lived WebSockets by default — verify this early, not on Day 8).
-4. Deploy frontend, point it at the backend's public URL.
+1. Build the offline index (`python -m app.ingestion.build_index --lang hi --strategies metadata`), optionally bake into the image.
+2. `docker compose up --build`, then `curl localhost:8000/health`.
+3. Deploy the container to your chosen host (Fly.io/Railway/Render/cloud VM); confirm WebSocket support if you stream STT/generation — not all free-tier PaaS hosts support long-lived WebSockets by default. Verify this early, not on Day 8.
+4. Deploy a frontend (static site on Vercel/Netlify) that posts WAV audio to `POST /v1/voice`.
 5. Smoke-test the live link from a network other than your dev machine before recording Video 2.
 
 ## Reliability for Demo Day

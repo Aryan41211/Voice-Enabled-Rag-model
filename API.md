@@ -2,12 +2,26 @@
 
 Structured I/O is a scored harness requirement — this file is the contract every stage in `app/harness/` must honor. Define these as pydantic models (or equivalent) in code; this doc is the source of truth they should match.
 
-## External Endpoint (if you expose a REST/WebSocket API for the live demo)
+## External Endpoint (live demo — `app/api/server.py`)
 
-### `POST /query/audio` (or WebSocket equivalent for streaming)
-Request: multipart audio blob or streamed PCM/WAV chunks.
+FastAPI app exposed at port `8000` (uvicorn). Startup builds/warm-loads the pipeline, so first request is fast.
 
-Response:
+### `GET /health`
+```json
+{"status": "ok", "version": "0.1.0", "strategy": "metadata", "generation": "extractive", "stt_provider": "sarvam"}
+```
+
+### `POST /query` — text-in / text-out
+Request:
+```json
+{"text": "भारत का राष्ट्रीय पक्षी कौन सा है", "language": "hi"}
+```
+Response: the `QueryResponse` contract below.
+
+### `POST /v1/voice` — audio-in / text-out
+Multipart `audio` file (WAV; STT converts to PCM). Response is the same `QueryResponse` contract with `timings_ms.stt` populated.
+
+### `QueryResponse`
 ```json
 {
   "request_id": "uuid",
@@ -16,16 +30,13 @@ Response:
   "refused": false,
   "refusal_reason": "string | null",
   "sources": [
-    {"chunk_id": "string", "passage": "string", "score": 0.0, "strategy": "hybrid"}
+    {"chunk_id": "string", "passage": "string", "score": 0.0, "strategy": "metadata"}
   ],
   "timings_ms": {
-    "stt": 0,
-    "retrieval": 0,
-    "ttft": 0,
-    "full_generation": 0,
-    "guardrails": 0,
-    "total": 0
-  }
+    "stt": 0, "input_guardrail": 0, "retrieval": 0,
+    "retrieval_guardrail": 0, "generation": 0, "output_guardrail": 0, "total_ms": 0
+  },
+  "schema_version": "1.0"
 }
 ```
 
@@ -67,6 +78,7 @@ class RetrievalResult(BaseModel):
     query: str
     chunks: list[RetrievedChunk]
     retrieval_latency_ms: float
+    background_score: float | None  # cosine at deep rank (rank 20); top-1 minus this ≈ isolation margin
 ```
 
 ### `Answer` (Generation → Output Guardrail → API response)
