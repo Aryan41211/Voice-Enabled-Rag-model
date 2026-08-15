@@ -15,16 +15,16 @@ machine-checkable status.
 - [ ] CI lint/test skeleton (GitHub Actions)
 
 ## Day 2 — Chunking & Indexing
-- [~] Pipeline schemas per API.md (`app/harness/schemas.py`)
-- [ ] 5 chunking strategies (`app/ingestion/chunking.py`)
-- [ ] Embedding wrapper (`app/ingestion/embed.py`)
-- [ ] FAISS + BM25 index build per strategy (`app/ingestion/build_index.py`)
-- [ ] Retrieval eval script (Recall@k, MRR) — `benchmarks/run_retrieval_eval.py`
+- [x] Pipeline schemas per API.md (`app/harness/schemas.py`)
+- [x] 5 chunking strategies (`app/ingestion/chunking.py`)
+- [x] Embedding wrapper (`app/ingestion/embed.py`)
+- [x] FAISS + BM25 index build per strategy (`app/ingestion/build_index.py`)
+- [x] Retrieval eval script (Recall@k, MRR) — `benchmarks/run_retrieval_eval.py`
 
 ## Day 3 — Retrieval Evaluation & Hybrid Search
-- [ ] Dense + sparse + hybrid (RRF) retrievers (`app/retrieval/`)
-- [ ] Run eval across strategies, pick winner → EVALUATION.md
-- [ ] Optional cross-encoder rerank + latency cost
+- [x] Dense + sparse + hybrid (RRF) retrievers (`app/retrieval/`)
+- [x] Run eval across strategies, pick winner → EVALUATION.md (winner: metadata-aware + dense, MRR 0.452)
+- [~] Optional cross-encoder rerank + latency cost
 
 ## Day 4 — Generation & Guardrails
 - [ ] Generation stage: extractive fallback + hosted LLM, forced citation

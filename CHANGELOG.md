@@ -5,10 +5,15 @@ All notable changes to this project during the HH Goa 2026 sprint. Format loosel
 ## [Unreleased]
 ### Added
 - Initial project documentation set (README, ARCHITECTURE, CHUNKING_STRATEGY, GUARDRAILS, LATENCY_BENCHMARK, EVALUATION, API, TESTING, DEPLOYMENT, ROADMAP, SUBMISSION_CHECKLIST, CONTRIBUTING)
+- Shared pipeline schemas (`app/harness/schemas.py`) per API.md
+- 5 chunking strategies (`app/ingestion/chunking.py`): fixed+overlap, semantic, sentence-window, metadata-aware, hierarchical
+- FAISS + BM25 index builder (`app/ingestion/build_index.py`) per strategy
+- Dense / sparse / hybrid (RRF) retrievers (`app/retrieval/`)
+- Retrieval evaluation script (Recall@3/@5, MRR) + results in EVALUATION.md
+- Selection: **metadata-aware chunking + dense retrieval** (MRR 0.452, R@5 0.709, retrieval p50 ≈ 17 ms)
 
 ### Planned
 - STT integration (Sarvam `saaras:v3-realtime`)
-- 5 chunking strategies + hybrid dense/BM25 retrieval
 - Generation with forced citation + streaming TTFT measurement
 - 3-layer guardrail stack
 - Harness with retries/timeouts/circuit breaker
