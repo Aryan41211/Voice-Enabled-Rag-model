@@ -67,11 +67,16 @@ jobs:
 
   stt-integration:
     needs: [lint, test]
-    if: github.event_name == 'workflow_dispatch' && secrets.SARVAM_API_KEY != ''
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       SARVAM_API_KEY: ${{ secrets.SARVAM_API_KEY }}
     steps:
+      - name: Guard - SARVAM_API_KEY secret must be configured
+        if: env.SARVAM_API_KEY == ''
+        run: |
+          echo "::error::Set the SARVAM_API_KEY repository secret, then re-run this job"
+          exit 1
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
