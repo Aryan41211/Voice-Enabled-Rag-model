@@ -27,9 +27,10 @@ machine-checkable status.
 - [x] Cross-encoder rerank ablation → EVALUATION.md (gains R@5 +8.4 pts but +345 ms; excluded from live path)
 
 ## Day 4 — Generation & Guardrails
-- [ ] Generation stage: extractive fallback + hosted LLM, forced citation
-- [ ] 3-layer guardrails + adversarial test set
-- [ ] Guardrail unit tests
+- [x] Generation stage: extractive fallback + hosted LLM, forced citation (`app/generation/generator.py`)
+- [x] 3-layer guardrail stack (`app/guardrails/guardrails.py`) — input (garbage/unsafe/off-topic), retrieval (score floor + isolation margin), output (citation/groundedness)
+- [x] Guardrail unit tests + adversarial set (`tests/adversarial/`) with expected refusal actions
+- [x] Retrieval guardrail threshold calibrated on eval gold (margin ≥ 0.03 → refuse) → EVALUATION.md
 
 ## Day 5 — Harness & STT Integration
 - [ ] Orchestrator: typed I/O, timeouts, retries, circuit breaker, tracing

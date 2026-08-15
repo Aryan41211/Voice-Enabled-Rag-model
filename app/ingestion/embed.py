@@ -74,5 +74,10 @@ class Embedder:
         q = f"query: {query}" if self._prefix else query
         return self.encode([q])[0]
 
+    def encode_query_batch(self, queries: list[str]) -> np.ndarray:
+        """Encode many queries with the ``query:`` prefix if required."""
+        prefixed = [f"query: {q}" for q in queries] if self._prefix else list(queries)
+        return self.encode(prefixed)
+
     def clear(self) -> None:
         self._model = None

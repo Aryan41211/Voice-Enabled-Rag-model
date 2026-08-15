@@ -52,3 +52,22 @@ Rate each on a 1–5 scale, or pass/fail — pick one and be consistent.
 - Retrieval corpus is a 1,500-query sample (~15K passages) of the Hindi validation split — generalization to other 12 languages and the full corpus is not yet verified.
 - Hybrid (dense + BM25) hurt results on this Hindi subset; BM25 is known to be weak on highly inflected Hindi. Re-evaluate if supporting a more analytic language (e.g. English source passages).
 - Semantic chunking adds ~98 s of offline build time for no retrieval gain at this corpus size (passages are already short).
+
+## 6. Guardrail Threshold Calibration (retrieval "no relevant" check)
+
+Calibrated on 120 eval queries (metadata index, dense, 384-dim e5 vectors). The
+absolute top-1 cosine is **not** a relevance signal here — it is ~0.88 both for
+queries whose top-5 contains a gold passage and for those that miss, because
+the nearest-neighbor cosine in this space tracks corpus density, not relevance.
+
+Instead we use an *isolation margin* = top-1 score − score at rank 20
+(corpus background):
+
+| Query set | margin p10 | margin p25 | margin median |
+|---|---|---|---|
+| top-5 contains gold (n=110) | 0.038 | 0.046 | 0.061 |
+| top-5 misses gold (n=10) | 0.016 | 0.018 | 0.026 |
+
+Threshold `min_margin = 0.03` (below → refuse "no relevant information") cleanly
+separates the two populations on this sample; it is configurable in
+`RetrievalGuardrail`.

@@ -11,6 +11,10 @@ All notable changes to this project during the HH Goa 2026 sprint. Format loosel
 - Dense / sparse / hybrid (RRF) retrievers (`app/retrieval/`)
 - Retrieval evaluation script (Recall@3/@5, MRR) + results in EVALUATION.md
 - Selection: **metadata-aware chunking + dense retrieval** (MRR 0.452, R@5 0.709, retrieval p50 ≈ 17 ms)
+- Cross-encoder reranker (`app/retrieval/rerank.py`) — ablation in EVALUATION.md
+- Generation stage (`app/generation/`): extractive fallback + optional streaming LLM with TTFT + forced citations
+- 3-layer guardrail stack (`app/guardrails/`): input (garbage/unsafe/off-topic), retrieval (score floor + isolation margin), output (citation + groundedness)
+- Guardrail adversarial test set (`tests/adversarial/`)
 
 ### Planned
 - STT integration (Sarvam `saaras:v3-realtime`)

@@ -42,6 +42,11 @@ class RetrievalResult(BaseModel):
     query: str
     chunks: list[RetrievedChunk] = Field(default_factory=list)
     retrieval_latency_ms: float = Field(default=0.0, ge=0.0)
+    background_score: float | None = Field(
+        default=None,
+        description="Cosine at a deep rank (e.g. rank 20); top-1 minus this "
+        "estimates how isolated the best match is.",
+    )
 
 
 class Answer(BaseModel):
