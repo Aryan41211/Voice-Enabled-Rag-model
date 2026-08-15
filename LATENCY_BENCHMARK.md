@@ -34,8 +34,9 @@ Retrieval + generation TTFT:
 Retrieval + full generation (for transparency, not claimed as "the 200ms number"):
   P50: 15.0 ms   P70: 19.1 ms   P100: 30.7 ms
 
-STT (separate stage — not measured; no Sarvam key on dev machine):
-  P50: __ ms   P70: __ ms   P100: __ ms
+STT (separate stage — network-bound; measured on a cloud CI runner, GitHub Actions):
+  P50: 1946 ms (full-clip WebSocket round-trip for a ~3 s clip; real-time
+        streaming TTFT would be far lower — needs a live demo host to measure)
 ```
 
 ## Script Skeleton

@@ -46,7 +46,7 @@ Rate each on a 1–5 scale, or pass/fail — pick one and be consistent.
 | Retrieval only | 15.2 ms | 19.4 ms | 40.2 ms |
 | Retrieval + TTFT | 15.2 ms | 19.4 ms | 40.2 ms |
 | Retrieval + full generation | 15.0 ms | 19.1 ms | 30.7 ms |
-| STT | — | — | — |
+| STT (full-clip WS round-trip, cloud CI) | 1,946 ms | — | — |
 
 ## 5. Known Limitations
 - Retrieval corpus is a 1,500-query sample (~15K passages) of the Hindi validation split — generalization to other 12 languages and the full corpus is not yet verified.

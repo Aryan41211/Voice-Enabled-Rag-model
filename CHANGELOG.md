@@ -33,6 +33,7 @@ All notable changes to this project during the HH Goa 2026 sprint. Format loosel
 ### Notes
 - Chosen stack: `metadata` chunking + dense-only retrieval (hybrid/RRF hurt Hindi retrieval; reranker excluded — too slow for budget)
 - Live STT/hosted-LLM paths are key-gated (`STT_PROVIDER`, `LLM_PROVIDER`); extractive generation is the offline default
+- CI fully green on GitHub Actions: lint (ruff) + 88 tests + real-stack e2e smoke + **real Sarvam STT round-trip** (hi-IN, exact transcript match) using the `SARVAM_API_KEY` repo secret
 
 ---
 
