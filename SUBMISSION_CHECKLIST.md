@@ -4,17 +4,20 @@
 
 ## Core Deliverables
 - [ ] Submission form filled: https://forms.gle/MNvCjcv23Hn2Eeu58
-- [ ] GitHub repo link — public, README complete, real (non-placeholder) benchmark numbers
+- [x] GitHub repo link — public, README complete, real (non-placeholder) benchmark numbers
 - [ ] Live working link — tested from a fresh browser/network, not just localhost
+      (ready: `scripts/start_demo.ps1` serves the app + a public https tunnel;
+      verified /health + /query through trycloudflare — still needs an
+      incognito/different-device check)
 - [ ] Video 1 uploaded (Team/process, 90 seconds, shows process not product)
 - [ ] Video 2 uploaded (Demo, full end-to-end working demo)
 
 ## Technical Requirement Verification
-- [ ] STT via Sarvam **or** ElevenLabs (only one, clearly stated in README)
-- [ ] Multiple chunking strategies implemented and documented with comparison data in EVALUATION.md (not just claimed)
-- [ ] Latency numbers reported as P50/P70/P100 across a real query sample (not one lucky run)
-- [ ] 200ms claim is scoped and disclosed honestly (retrieval vs. TTFT vs. full generation — see README §2)
-- [ ] Harness: retries, structured I/O, error recovery all demonstrably present in code (not just described)
+- [x] STT via Sarvam **or** ElevenLabs (only one, clearly stated in README) — Sarvam `saaras:v3-realtime`, verified live in CI
+- [x] Multiple chunking strategies implemented and documented with comparison data in EVALUATION.md (not just claimed)
+- [x] Latency numbers reported as P50/P70/P100 across a real query sample (not one lucky run) — LATENCY_BENCHMARK.md, 110 real queries
+- [x] 200ms claim is scoped and disclosed honestly (retrieval vs. TTFT vs. full generation — see README §2)
+- [x] Harness: retries, structured I/O, error recovery all demonstrably present in code (not just described)
 - [ ] Guardrails: at least one live demonstration in Video 2 of the system refusing to answer
 
 ## Promotion Requirement (mandatory, per-member)

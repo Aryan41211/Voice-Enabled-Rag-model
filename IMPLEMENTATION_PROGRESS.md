@@ -39,9 +39,10 @@ machine-checkable status.
 
 ## Day 6 — Latency Benchmark, Deployment & Hardening
 - [x] P50/P70/P100 on 110 real queries → LATENCY_BENCHMARK.md (retrieval P50 15.2 / P70 19.4 / P100 40.2 ms)
-- [x] FastAPI backend (`app/api/server.py`: /health, /query, /v1/voice) + API tests
+- [x] FastAPI backend (`app/api/server.py`: /health, /query, /v1/voice) + browser voice UI at `/` + API tests
 - [x] Dockerfile + docker-compose.yml + entrypoint + .dockerignore + CI
-- [ ] Deploy live link (needs cloud credentials + SARVAM_API_KEY)
+- [x] Live link via free cloudflared tunnel (`scripts/start_demo.ps1`) — verified /health + /query over public https
+- [~] HF Spaces deploy staged (`space/`) but Docker Spaces now need PRO subscription — tunnel chosen instead
 
 ## Day 7-8 — Demo Prep & Submission
 - [ ] Real numbers in EVALUATION.md / LATENCY_BENCHMARK.md

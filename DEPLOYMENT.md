@@ -12,6 +12,33 @@ The brief requires a **live working link**. Latency matters, so hosting choices 
 | STT | Sarvam API (external, unavoidable network hop) | This is why STT latency is reported separately — it's inherently network-bound |
 | Generation | Fast-inference API (e.g. Groq) — also external | Same reasoning as STT: report its latency honestly rather than pretending it's free |
 
+## Fastest Live Link: cloudflared Quick Tunnel (free, zero account)
+
+For the demo window the fastest path is a free HTTPS tunnel from a running laptop —
+no cloud account, no billing, nothing new to learn. Already tested end-to-end
+(public `/health` 200 and `/query` answered through the tunnel).
+
+```powershell
+# 1. One-time: install cloudflared
+winget install Cloudflare.cloudflared
+# (falls back to: download cloudflared-windows-amd64.exe into %LOCALAPPDATA%\cloudflared\)
+
+# 2. Add your Sarvam key so live voice works (optional; text queries work without it)
+#    add SARVAM_API_KEY=sk_... to .env
+
+# 3. Start the demo (starts the API on :8000, waits for it, then opens the tunnel)
+powershell -ExecutionPolicy Bypass -File scripts/start_demo.ps1
+```
+
+Copy the printed `https://<random>.trycloudflare.com` URL — that's the live link.
+Keep the window open; the laptop must stay on for the demo. Verify from an
+incognito window / phone on cellular data before recording Video 2.
+
+> HF Spaces alternative: `space/` ships a Dockerfile + front matter for a Docker
+> Space (index baked at build time). As of 2026 a Docker Space requires an HF PRO
+> subscription (~$9/mo) — free tier is static-only. `scripts/deploy_space.py`
+> creates and pushes the Space once you're logged in (`huggingface-cli login`).
+
 ## Environment Variables (`.env.example`)
 
 ```bash

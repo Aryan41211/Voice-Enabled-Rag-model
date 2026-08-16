@@ -29,6 +29,9 @@ All notable changes to this project during the HH Goa 2026 sprint. Format loosel
 - Dockerfile + docker-compose.yml + `scripts/entrypoint.py` (auto-builds index on first boot) + `.dockerignore`
 - GitHub Actions CI (`ci.yml`) running the full 88-test suite on Ubuntu (no model downloads in tests)
 - API tests (`tests/integration/test_api.py`), eval script bootstrap + warm-up fix
+- Browser voice UI served at `/` (self-contained HTML: mic → 16 kHz WAV → `/v1/voice`, text fallback → `/query`)
+- Live demo launcher (`scripts/start_demo.ps1`): starts the API and opens a free cloudflared https tunnel — public link verified end-to-end
+- HF Spaces deploy staged (`space/` + `scripts/deploy_space.py`); Docker Spaces now require HF PRO, so the tunnel is the demo path
 
 ### Notes
 - Chosen stack: `metadata` chunking + dense-only retrieval (hybrid/RRF hurt Hindi retrieval; reranker excluded — too slow for budget)
