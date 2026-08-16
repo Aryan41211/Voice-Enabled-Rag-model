@@ -20,27 +20,46 @@ if (-not (Test-Path $cloudflared)) {
     exit 1
 }
 
-function Test-Health {
+function Test-OurHealth {
+    param([int]$p)
     try {
-        $r = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/health" -UseBasicParsing -TimeoutSec 3
-        return $r.StatusCode -eq 200
+        $r = Invoke-RestMethod -Uri "http://127.0.0.1:$p/health" -TimeoutSec 3
+        return ($r.status -eq 'ok' -and $r.version -eq '1.0')
     } catch { return $false }
 }
 
-if (Test-Health) {
-    Write-Host "[demo] server already running on :$Port"
+function Test-PortAvailable {
+    param([int]$p)
+    return $null -eq (Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue)
+}
+
+# Pick the port: reuse an already-running copy of OUR API, else the first free
+# port at or above $Port (probe upward past any foreign service).
+$selected = -1
+for ($try = 0; $try -lt 20; $try++) {
+    $candidate = $Port + $try
+    if (Test-OurHealth $candidate) { $selected = $candidate; break }
+    if (Test-PortAvailable $candidate) { $selected = $candidate; break }
+}
+if ($selected -lt 0) {
+    Write-Error "no free port found near :$Port"
+    exit 1
+}
+
+if (Test-OurHealth $selected) {
+    Write-Host "[demo] API server already running on :$selected"
 } else {
-    Write-Host "[demo] starting API server on :$Port ..."
+    Write-Host "[demo] starting API server on :$selected ..."
     $env:PYTHONIOENCODING = 'utf-8'
-    Start-Process -FilePath python -ArgumentList '-m','uvicorn','app.api.server:app','--host','127.0.0.1','--port',"$Port" -WorkingDirectory (Get-Location) -WindowStyle Minimized | Out-Null
+    Start-Process -FilePath python -ArgumentList '-m','uvicorn','app.api.server:app','--host','127.0.0.1','--port',"$selected" -WorkingDirectory (Get-Location) -WindowStyle Minimized | Out-Null
     $ready = $false
     for ($i = 0; $i -lt 90; $i++) {
         Start-Sleep -Seconds 2
-        if (Test-Health) { $ready = $true; break }
+        if (Test-OurHealth $selected) { $ready = $true; break }
     }
     if (-not $ready) { Write-Error "API server failed to become healthy" ; exit 1 }
-    Write-Host "[demo] API server ready"
+    Write-Host "[demo] API server ready on :$selected"
 }
 
 Write-Host "[demo] opening public tunnel - keep this window open. Copy the https:// URL below."
-& $cloudflared tunnel --url "http://127.0.0.1:$Port"
+& $cloudflared tunnel --url "http://127.0.0.1:$selected"
