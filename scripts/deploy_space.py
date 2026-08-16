@@ -54,7 +54,7 @@ def main() -> int:
         repo_type="space",
         commit_message="deploy voice-rag demo",
     )
-    print(f"[deploy] pushed; live in a few minutes:")
+    print("[deploy] pushed; live in a few minutes:")
     print(f"[deploy]   https://huggingface.co/spaces/{repo_id}")
     print(f"[deploy]   https://{namespace}-{args.name}.hf.space")
     return 0
