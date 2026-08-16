@@ -130,7 +130,7 @@ class SarvamSTT:
                     )
                 await ws.send(json.dumps({"event": "end"}))
 
-                final_text: str | None = None
+                final_parts: list[str] = []
                 async for message in ws:
                     try:
                         data = json.loads(message)
@@ -138,9 +138,9 @@ class SarvamSTT:
                         continue
                     event = data.get("event")
                     if event == "transcript.final":
-                        final_text = (data.get("text") or "").strip()
-                        if final_text:
-                            break
+                        text = (data.get("text") or "").strip()
+                        if text:
+                            final_parts.append(text)
                     elif event == "error":
                         fatal = bool(data.get("is_fatal", True))
                         raise STTError(
@@ -149,6 +149,11 @@ class SarvamSTT:
                         )
                     elif event == "session.end":
                         break
+                # Server VAD splits turns at ~1 s of silence; every turn is
+                # delivered as its own transcript.final. Collect all of them so
+                # multi-utterance input (natural pauses) is not truncated to the
+                # first sentence.
+                final_text = " ".join(final_parts).strip()
         except STTError:
             raise
         except Exception as exc:  # network / handshake / send failures

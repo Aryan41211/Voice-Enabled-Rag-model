@@ -164,6 +164,45 @@ def test_ws_transcript_used_first(monkeypatch, tmp_path):
     assert result.text == "हैलो"
 
 
+def test_ws_joins_multiple_finals(monkeypatch, tmp_path):
+    # Server VAD splits multi-utterance audio (pause >1s) into several
+    # transcript.final events. The client must keep all of them, not truncate
+    # to the first (previously it broke on the first final).
+    p = tmp_path / "a.wav"
+    _make_wav(p)
+    _patch_ws(
+        monkeypatch,
+        messages=[
+            '{"event":"session.begin"}',
+            '{"event":"transcript.final","text":"पहला वाक्य।"}',
+            '{"event":"transcript.final","text":"दूसरा वाक्य?"}',
+            '{"event":"session.end"}',
+        ],
+    )
+    stt = SarvamSTT(api_key="k")
+    result = asyncio.run(stt.transcribe(str(p)))
+    assert result.text == "पहला वाक्य। दूसरा वाक्य?"
+
+
+def test_ws_empty_finals_fall_back_to_rest(monkeypatch, tmp_path):
+    p = tmp_path / "a.wav"
+    _make_wav(p)
+    _patch_ws(
+        monkeypatch, messages=['{"event":"session.begin"}', '{"event":"session.end"}']
+    )
+
+    def handler(url, headers, data, files):
+        return FakeResponse(200, {"transcript": "rest तो ठीक है"})
+
+    orig = _rest_client(handler)
+    try:
+        stt = SarvamSTT(api_key="k")
+        result = asyncio.run(stt.transcribe(str(p)))
+        assert result.text == "rest तो ठीक है"
+    finally:
+        sttmod.httpx.AsyncClient = orig
+
+
 def test_ws_error_is_fatal(monkeypatch, tmp_path):
     p = tmp_path / "a.wav"
     _make_wav(p)
