@@ -51,6 +51,34 @@ LANGUAGE_CODES = {
 }
 AUDIO_CHUNK_BYTES = 2048
 
+# Sarvam's synchronous REST/WS endpoints reject audio longer than 30 s. Longer
+# recordings go through the async batch job API instead (verified live).
+REST_MAX_SECONDS = 30.0
+BATCH_BASE_URL = "https://api.sarvam.ai/speech-to-text/job/v1"
+BATCH_POLL_SECONDS = 2.0
+BATCH_POLL_ATTEMPTS = 40
+
+
+class STTBatchRequiredError(STTError):
+    """Audio exceeds the 30 s sync limit; the caller should retry via batch."""
+
+
+def _audio_duration_s(path: str | Path) -> float | None:
+    """Seconds of a WAV from its header alone (no frame read). None if unparseable."""
+    try:
+        import wave
+
+        with wave.open(str(path), "rb") as wav:
+            return wav.getnframes() / max(wav.getframerate(), 1)
+    except Exception:
+        return None
+
+
+def _is_duration_error(body: str) -> bool:
+    """True when Sarvam rejected the audio because it is too long for sync."""
+    low = body.lower()
+    return "duration" in low and "limit" in low and "30" in low
+
 
 def _normalize_pcm(raw: bytes, rate: int, channels: int) -> bytes:
     """Normalize raw linear16 PCM to the 16 kHz mono format Sarvam expects.
@@ -142,6 +170,12 @@ class SarvamSTT:
     async def transcribe(self, audio_path: str | Path) -> Transcript:
         if not self.api_key:
             raise STTError("Sarvam STT selected but no API key configured")
+        # Sarvam's sync endpoints reject audio > 30 s, so route long files to
+        # the async batch job API up front instead of wasting the WS/REST budget.
+        duration = _audio_duration_s(audio_path)
+        if duration is not None and duration > REST_MAX_SECONDS:
+            logger.info("stt: %.1fs audio -> batch API", duration)
+            return await self._transcribe_batch(audio_path)
         # The realtime WS is only worth its latency for short input; when the
         # server cannot keep up (long / multi-turn audio) it would otherwise
         # eat the entire stt_timeout_s budget and the pipeline would fail
@@ -156,6 +190,8 @@ class SarvamSTT:
                 ws_budget,
             )
             return await self._transcribe_rest(audio_path)
+        except STTBatchRequiredError:
+            return await self._transcribe_batch(audio_path)
         except STTError as exc:
             if not exc.retryable:
                 raise
@@ -163,7 +199,10 @@ class SarvamSTT:
             logger.warning(
                 "Sarvam realtime unavailable (%s); falling back to REST", exc
             )
-            return await self._transcribe_rest(audio_path)
+            try:
+                return await self._transcribe_rest(audio_path)
+            except STTBatchRequiredError:
+                return await self._transcribe_batch(audio_path)
 
     async def _transcribe_ws(self, audio_path: str | Path) -> Transcript:
         websockets = _get_websockets()
@@ -282,6 +321,10 @@ class SarvamSTT:
             len(files["file"][1]),
         )
         if resp.status_code >= 400:
+            if _is_duration_error(resp.text):
+                raise STTBatchRequiredError(
+                    f"Sarvam REST HTTP {resp.status_code}: {resp.text[:200]}"
+                )
             raise STTError(
                 f"Sarvam REST HTTP {resp.status_code}: {resp.text[:200]}",
                 retryable=resp.status_code >= 500,
@@ -298,6 +341,129 @@ class SarvamSTT:
             raise STTError("Sarvam REST returned an empty transcript", retryable=True)
 
         latency_ms = (time.perf_counter() - t0) * 1000
+        return Transcript(
+            text=text,
+            language=self.language_code,
+            is_final=True,
+            stt_latency_ms=latency_ms,
+        )
+
+    async def _transcribe_batch(self, audio_path: str | Path) -> Transcript:
+        """Transcribe long audio via the Sarvam async batch job API.
+
+        Flow (verified live): initiate -> upload-files -> PUT file -> start ->
+        poll status -> download-files -> GET transcript JSON.
+        """
+        t0 = time.perf_counter()
+        headers = {"api-subscription-key": self.api_key}
+        filename = Path(audio_path).name
+        audio = Path(audio_path).read_bytes()
+        params = {
+            "job_parameters": {
+                "model": "saaras:v3",
+                "language_code": self.language_code,
+                "mode": "transcribe",
+            }
+        }
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout_s) as client:
+                r = await client.post(BATCH_BASE_URL, json=params, headers=headers)
+                if r.status_code not in (200, 202):
+                    raise STTError(
+                        f"Sarvam batch init HTTP {r.status_code}: {r.text[:200]}"
+                    )
+                job_id = (r.json() or {}).get("job_id")
+                if not job_id:
+                    raise STTError(
+                        f"Sarvam batch init missing job_id: {r.text[:200]}",
+                        retryable=True,
+                    )
+                logger.info("stt batch: job %s initiated", job_id)
+
+                r = await client.post(
+                    f"{BATCH_BASE_URL}/upload-files",
+                    json={"job_id": job_id, "files": [filename]},
+                    headers=headers,
+                )
+                uploads = (r.json() or {}).get("upload_urls") or {}
+                file_url = (uploads.get(filename) or {}).get("file_url")
+                if not file_url:
+                    raise STTError(
+                        f"Sarvam batch upload-files HTTP {r.status_code}: {r.text[:200]}",
+                        retryable=True,
+                    )
+
+                r = await client.put(
+                    file_url,
+                    content=audio,
+                    headers={
+                        "Content-Type": "audio/wav",
+                        "x-ms-blob-type": "BlockBlob",
+                    },
+                )
+                if r.status_code >= 400:
+                    raise STTError(
+                        f"Sarvam batch file upload HTTP {r.status_code}: {r.text[:200]}",
+                        retryable=True,
+                    )
+
+                r = await client.post(
+                    f"{BATCH_BASE_URL}/{job_id}/start", headers=headers
+                )
+                if r.status_code >= 400:
+                    raise STTError(
+                        f"Sarvam batch start HTTP {r.status_code}: {r.text[:200]}",
+                        retryable=True,
+                    )
+
+                output_files: list[str] = []
+                for _ in range(BATCH_POLL_ATTEMPTS):
+                    await asyncio.sleep(BATCH_POLL_SECONDS)
+                    r = await client.get(
+                        f"{BATCH_BASE_URL}/{job_id}/status", headers=headers
+                    )
+                    body = r.json() if r.status_code == 200 else {}
+                    state = body.get("job_state") or ""
+                    if state in ("Completed", "PartiallyCompleted"):
+                        for detail in body.get("job_details") or []:
+                            for out in detail.get("outputs") or []:
+                                name = out.get("file_name")
+                                if name:
+                                    output_files.append(name)
+                        break
+                    if state == "Failed":
+                        raise STTError(f"Sarvam batch job failed: {r.text[:200]}")
+                if not output_files:
+                    raise STTError(
+                        "Sarvam batch job did not finish in time",
+                        retryable=True,
+                    )
+
+                r = await client.post(
+                    f"{BATCH_BASE_URL}/download-files",
+                    json={"job_id": job_id, "files": output_files},
+                    headers=headers,
+                )
+                downloads = (r.json() or {}).get("download_urls") or {}
+                parts: list[str] = []
+                for name in output_files:
+                    dl = (downloads.get(name) or {}).get("file_url")
+                    if not dl:
+                        raise STTError(
+                            f"Sarvam batch download-files missing {name}: {r.text[:200]}",
+                            retryable=True,
+                        )
+                    r = await client.get(dl)
+                    if r.status_code == 200:
+                        parts.append((r.json() or {}).get("transcript") or "")
+        except httpx.HTTPError as exc:
+            raise STTError(f"Sarvam batch failed: {exc}", retryable=True)
+
+        text = " ".join(p for p in parts if p).strip()
+        if not text:
+            raise STTError("Sarvam batch returned an empty transcript", retryable=True)
+        latency_ms = (time.perf_counter() - t0) * 1000
+        logger.info("stt batch: done in %.0fms (%d chars)", latency_ms, len(text))
         return Transcript(
             text=text,
             language=self.language_code,

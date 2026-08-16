@@ -45,7 +45,9 @@ class FakeResponse:
     def __init__(self, status_code, payload):
         self.status_code = status_code
         self._payload = payload
-        self.text = payload if isinstance(payload, str) else ""
+        self.text = (
+            payload if isinstance(payload, str) else __import__("json").dumps(payload)
+        )
 
     def json(self):
         if isinstance(self._payload, str):
@@ -57,8 +59,14 @@ class FakeAsyncClient:
     def __init__(self, handler):
         self._handler = handler
 
-    async def post(self, url, headers=None, data=None, files=None):
+    async def post(self, url, headers=None, data=None, files=None, json=None):
         return self._handler(url, headers, data, files)
+
+    async def put(self, url, headers=None, content=None):
+        return self._handler(url, headers, content, None)
+
+    async def get(self, url, headers=None):
+        return self._handler(url, headers, None, None)
 
     async def __aenter__(self):
         return self
@@ -90,7 +98,9 @@ def _patch_ws(monkeypatch, messages=None, exc=None):
     monkeypatch.setattr(sttmod, "_get_websockets", lambda: fake_mod)
 
 
-def _make_wav(path, frames=b"\x00\x00" * 1600, rate=16000, channels=1):
+def _make_wav(path, frames=b"\x00\x00" * 1600, rate=16000, channels=1, duration_s=None):
+    if duration_s is not None:
+        frames = b"\x00\x00" * int(rate * duration_s)
     with wave.open(str(path), "wb") as w:
         w.setnchannels(channels)
         w.setsampwidth(2)
@@ -308,6 +318,110 @@ def test_ws_error_is_fatal(monkeypatch, tmp_path):
         assert False, "should have raised"
     except STTError:
         pass
+
+
+def _batch_client(job_id="j1", transcript="लंबा ऑडियो ठीक", state="Completed"):
+    """Fake Sarvam batch job API; dispatch is by URL (mirrors live flow)."""
+
+    def handler(url, headers, data, files):
+        base = sttmod.BATCH_BASE_URL
+        if url == base:
+            return FakeResponse(202, {"job_id": job_id, "job_state": "Accepted"})
+        if url == f"{base}/upload-files":
+            return FakeResponse(
+                200, {"upload_urls": {"a.wav": {"file_url": "https://blob/in/a.wav"}}}
+            )
+        if url == "https://blob/in/a.wav":
+            return FakeResponse(201, "")
+        if url == f"{base}/{job_id}/start":
+            return FakeResponse(200, {})
+        if url == f"{base}/{job_id}/status":
+            return FakeResponse(
+                200,
+                {
+                    "job_state": state,
+                    "job_details": [{"outputs": [{"file_name": "0.json"}]}],
+                },
+            )
+        if url == f"{base}/download-files":
+            return FakeResponse(
+                200,
+                {"download_urls": {"0.json": {"file_url": "https://blob/out/0.json"}}},
+            )
+        if url == "https://blob/out/0.json":
+            return FakeResponse(200, {"transcript": transcript})
+        raise AssertionError(f"unexpected url: {url}")
+
+    return handler
+
+
+def test_long_audio_uses_batch_directly(monkeypatch, tmp_path):
+    # A WAV longer than Sarvam's 30 s sync cap must go straight to the batch
+    # job API — the realtime WS path must never be attempted.
+    p = tmp_path / "a.wav"
+    _make_wav(p, duration_s=35.0)
+
+    def never_ws(url, **kwargs):
+        raise AssertionError("WS must not be attempted for long audio")
+
+    import types
+
+    monkeypatch.setattr(
+        sttmod, "_get_websockets", lambda: types.SimpleNamespace(connect=never_ws)
+    )
+    monkeypatch.setattr(sttmod, "BATCH_POLL_SECONDS", 0.01)
+    orig = _rest_client(_batch_client())
+    try:
+        stt = SarvamSTT(api_key="k")
+        result = asyncio.run(stt.transcribe(str(p)))
+        assert result.text == "लंबा ऑडियो ठीक"
+    finally:
+        sttmod.httpx.AsyncClient = orig
+
+
+def test_rest_duration_error_falls_back_to_batch(monkeypatch, tmp_path):
+    # Short-enough-to-try-WS audio that still gets a 400 from the sync REST
+    # endpoint (duration over the 30 s limit) must reroute to the batch API
+    # instead of surfacing a hard error.
+    p = tmp_path / "a.wav"
+    _make_wav(p)
+    _patch_boom(monkeypatch)
+    monkeypatch.setattr(sttmod, "BATCH_POLL_SECONDS", 0.01)
+    calls = {"rest": 0}
+
+    def handler(url, headers, data, files):
+        if url == DEFAULT_REST_URL:
+            calls["rest"] += 1
+            return FakeResponse(
+                400,
+                {"error": "Audio duration exceeds the maximum limit of 30 seconds."},
+            )
+        return _batch_client()(url, headers, data, files)
+
+    orig = _rest_client(handler)
+    try:
+        stt = SarvamSTT(api_key="k")
+        result = asyncio.run(stt.transcribe(str(p)))
+        assert result.text == "लंबा ऑडियो ठीक"
+        assert calls["rest"] == 1
+    finally:
+        sttmod.httpx.AsyncClient = orig
+
+
+def test_batch_failed_state_raises(monkeypatch, tmp_path):
+    p = tmp_path / "a.wav"
+    _make_wav(p, duration_s=35.0)
+    monkeypatch.setattr(sttmod, "BATCH_POLL_SECONDS", 0.01)
+    orig = _rest_client(_batch_client(state="Failed"))
+    try:
+        stt = SarvamSTT(api_key="k")
+        try:
+            asyncio.run(stt.transcribe(str(p)))
+            assert False, "should have raised"
+        except STTError:
+            pass
+    finally:
+        sttmod.httpx.AsyncClient = orig
 
 
 def _settings(**overrides):
