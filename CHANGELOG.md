@@ -19,6 +19,8 @@ All notable changes to this project during the HH Goa 2026 sprint. Format loosel
 
 ### Added
 - Fresh-clone dry-run verified (README Option B end-to-end on a clean checkout): venv install → tiny index build → 6/6 gold smoke queries → latency bench → server boots → `/health`, `/query`, `/` all 200
+- Live link re-verified over a public tunnel: real Sarvam voice round-trip (exact transcript, ~994 ms total), Hindi text query answered, out-of-scope query refused honestly
+- `v0.1.0` release tagged + GitHub Release published
 
 ---
 

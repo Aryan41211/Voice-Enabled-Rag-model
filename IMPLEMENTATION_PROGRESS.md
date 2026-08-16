@@ -42,13 +42,14 @@ machine-checkable status.
 - [x] FastAPI backend (`app/api/server.py`: /health, /query, /v1/voice) + browser voice UI at `/` + API tests
 - [x] Dockerfile + docker-compose.yml + entrypoint + .dockerignore + CI
 - [x] Live link via free cloudflared tunnel (`scripts/start_demo.ps1`) — verified /health + /query over public https
+- [x] Live link re-verified end-to-end over public tunnel: real Sarvam voice (exact transcript, 993 ms total), Hindi text query answered, unsupported query refused honestly
 - [~] HF Spaces deploy staged (`space/`) but Docker Spaces now need PRO subscription — tunnel chosen instead
 
 ## Day 7-8 — Demo Prep & Submission
 - [x] Real numbers in EVALUATION.md / LATENCY_BENCHMARK.md
 - [x] Final validation sweep (tests, lint, secrets, TODOs, docs)
 - [x] Fresh-clone dry-run (README Option B) — venv install, tiny index, 6/6 smoke, bench, server boot; caught+fixed missing `python-multipart`
-- [~] Release: tag + GitHub Release + CHANGELOG — in progress
+- [x] Release: `v0.1.0` tag + GitHub Release (notes) + CHANGELOG synced
 
 ## Environment
 - GPU: RTX 4050 Laptop (CUDA available), 16.8 GB RAM

@@ -43,7 +43,7 @@ No resubmissions allowed — build with a "final by Day 7, polish on Day 8" mind
 - [ ] Live link tested from a different network (needs a phone — user task)
 
 ## Day 8 (Aug 22) — Submission Day
-- [~] Final GitHub push, tag a release, update CHANGELOG.md (in progress this sweep)
+- [x] Final GitHub push, tag a release (`v0.1.0` + GitHub Release), update CHANGELOG.md
 - [ ] Confirm live link is stable (test from a different network/device one more time)
 - [ ] Upload both videos to Instagram, X, LinkedIn — **every team member individually**, `#RAGInGoa` on every post, ≥1 public Instagram account
 - [ ] Fill submission form: https://forms.gle/MNvCjcv23Hn2Eeu58
