@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice RAG — Hindi</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Noto Sans Devanagari", sans-serif;
+    margin: 0; min-height: 100vh; background: #14102a;
+    color: #eee; display: flex; flex-direction: column; align-items: center;
+    padding: 32px 16px;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: #9a93c8; font-size: 13px; margin-bottom: 24px; }
+  .card {
+    width: 100%; max-width: 640px; background: #1d1838; border: 1px solid #342d5e;
+    border-radius: 14px; padding: 20px; margin-bottom: 16px;
+  }
+  button {
+    font-size: 15px; padding: 12px 20px; border-radius: 10px; border: none;
+    cursor: pointer; background: #6d5df6; color: #fff; font-weight: 600;
+  }
+  button.rec { background: #e5484d; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  input[type=text] {
+    width: 100%; padding: 12px; font-size: 15px; border-radius: 10px;
+    border: 1px solid #342d5e; background: #14102a; color: #eee; margin-bottom: 10px;
+  }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  #status { margin-left: 8px; color: #b7b0e0; font-size: 13px; }
+  .label { color: #9a93c8; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; margin: 12px 0 4px; }
+  .answer { font-size: 17px; line-height: 1.6; white-space: pre-wrap; }
+  .refused { color: #ffb4b6; }
+  .src { border-top: 1px solid #2a2447; padding: 8px 0; font-size: 13px; color: #cfc9ee; }
+  .src b { color: #9ecbff; }
+  .meta { color: #8d86b8; font-size: 12px; margin-top: 12px; }
+  #err { color: #ffb4b6; font-size: 13px; margin-top: 8px; }
+  .hidden { display: none; }
+  .pulse { animation: p 1s infinite; }
+  @keyframes p { 50% { opacity: .4; } }
+</style>
+</head>
+<body>
+  <h1>🎙️ Voice RAG</h1>
+  <div class="sub">भारत का राष्ट्रीय पक्षी कौन सा है? — बोलें या टाइप करें</div>
+
+  <div class="card">
+    <div class="row">
+      <button id="recBtn">🎤 रिकॉर्ड करें</button>
+      <span id="status">तैयार</span>
+    </div>
+    <div class="label">या टाइप करें</div>
+    <input id="textInput" type="text" placeholder="प्रश्न हिंदी में लिखें…">
+    <div class="row">
+      <button id="askBtn">पूछें</button>
+      <span id="err"></span>
+    </div>
+  </div>
+
+  <div class="card hidden" id="result">
+    <div class="label">आपका प्रश्न</div>
+    <div id="transcript"></div>
+    <div class="label">उत्तर</div>
+    <div id="answer" class="answer"></div>
+    <div class="label">स्रोत (retrieved passages)</div>
+    <div id="sources"></div>
+    <div class="meta" id="meta"></div>
+  </div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const recBtn = $("recBtn"), askBtn = $("askBtn"), statusEl = $("status"), errEl = $("err");
+const input = $("textInput"), result = $("result");
+
+let recorder = null, chunks = [];
+
+function setStatus(t, pulse) {
+  statusEl.textContent = t;
+  statusEl.className = pulse ? "pulse" : "";
+}
+
+async function postVoice(blob) {
+  const fd = new FormData();
+  fd.append("audio", blob, "speech.wav");
+  const res = await fetch("/v1/voice", { method: "POST", body: fd });
+  if (!res.ok) throw new Error("voice request failed: " + res.status);
+  return res.json();
+}
+
+async function postText(text) {
+  const res = await fetch("/query", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, language: "hi" }),
+  });
+  if (!res.ok) throw new Error("query failed: " + res.status);
+  return res.json();
+}
+
+function downsample(data, fromRate, toRate) {
+  if (fromRate === toRate) return data;
+  const ratio = fromRate / toRate;
+  const n = Math.floor(data.length / ratio);
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) out[i] = data[Math.floor(i * ratio)];
+  return out;
+}
+
+function encodeWav(samples, sampleRate) {
+  const buf = new ArrayBuffer(44 + samples.length * 2);
+  const v = new DataView(buf);
+  const wstr = (off, s) => { for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i)); };
+  wstr(0, "RIFF"); v.setUint32(4, 36 + samples.length * 2, true); wstr(8, "WAVE");
+  wstr(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, sampleRate, true); v.setUint32(28, sampleRate * 2, true);
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  wstr(36, "data"); v.setUint32(40, samples.length * 2, true);
+  let o = 44;
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    o += 2;
+  }
+  return buf;
+}
+
+async function webmToWav(blob) {
+  const ctx = new AudioContext({ sampleRate: 16000 });
+  const audio = await ctx.decodeAudioData(await blob.arrayBuffer());
+  const mono = audio.getChannelData(0);
+  const pcm = downsample(mono, audio.sampleRate, 16000);
+  return new Blob([encodeWav(pcm, 16000)], { type: "audio/wav" });
+}
+
+recBtn.addEventListener("click", async () => {
+  if (recorder) { recorder.stop(); return; }
+  errEl.textContent = "";
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    chunks = [];
+    recorder = new MediaRecorder(stream);
+    recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    recorder.onstop = async () => {
+      stream.getTracks().forEach((t) => t.stop());
+      recorder = null;
+      recBtn.textContent = "🎤 रिकॉर्ड करें";
+      if (!chunks.length) { setStatus("कुछ नहीं मिला"); return; }
+      setStatus("प्रोसेस हो रहा है…", true);
+      try {
+        const wav = await webmToWav(new Blob(chunks, { type: "audio/webm" }));
+        await showResult(await postVoice(wav));
+      } catch (e) { errEl.textContent = "त्रुटि: " + e.message; setStatus("त्रुटि"); }
+    };
+    recorder.start();
+    recBtn.textContent = "⏹ रोकें";
+    recBtn.classList.add("rec");
+    setStatus("सुन रहा हूँ…", true);
+  } catch (e) { errEl.textContent = "माइक नहीं मिला: " + e.message; }
+});
+
+askBtn.addEventListener("click", async () => {
+  const text = input.value.trim();
+  if (!text) return;
+  errEl.textContent = "";
+  setStatus("प्रोसेस हो रहा है…", true);
+  try { await showResult(await postText(text)); }
+  catch (e) { errEl.textContent = "त्रुटि: " + e.message; setStatus("त्रुटि"); }
+});
+
+function showResult(r) {
+  result.classList.remove("hidden");
+  $("transcript").textContent = r.transcript;
+  const a = $("answer");
+  a.className = "answer" + (r.refused ? " refused" : "");
+  a.textContent = r.refused
+    ? "⚠️ " + (r.refusal_reason || "इस प्रश्न का उत्तर नहीं दिया जा सकता")
+    : (r.answer || "कोई उत्तर नहीं");
+  const srcs = $("sources");
+  srcs.innerHTML = "";
+  (r.sources || []).forEach((s) => {
+    const d = document.createElement("div");
+    d.className = "src";
+    d.innerHTML = "<b>[" + s.chunk_id.slice(-6) + "]</b> " + s.passage.slice(0, 220);
+    srcs.appendChild(d);
+  });
+  const t = r.timings_ms || {};
+  $("meta").textContent = "total " + (t.total_ms !== undefined ? t.total_ms.toFixed(1) + " ms" : "—")
+    + " · retrieval " + (t.retrieval_ms !== undefined ? t.retrieval_ms.toFixed(1) + " ms" : "—")
+    + " · stt " + (t.stt_ms !== undefined ? t.stt_ms.toFixed(1) + " ms" : "—");
+  setStatus("तैयार");
+}
+</script>
+</body>
+</html>

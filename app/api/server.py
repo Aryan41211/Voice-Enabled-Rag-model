@@ -1,6 +1,7 @@
 """FastAPI server exposing the voice-RAG pipeline.
 
 Endpoints:
+* ``GET  /``         — browser voice UI (self-contained static page).
 * ``GET  /health``  — pipeline + model readiness.
 * ``POST /query``   — text query → ``QueryResponse`` (JSON).
 * ``POST /v1/voice``— audio upload → STT → ``QueryResponse``.
@@ -13,10 +14,12 @@ stage; configure ``LLM_PROVIDER``/keys to enable a hosted LLM.
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app.config import get_settings
@@ -28,6 +31,8 @@ logger = logging.getLogger("voice-rag")
 settings = get_settings()
 
 APP_VERSION = "0.1.0"
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 class QueryRequest(BaseModel):
@@ -64,8 +69,18 @@ class Server:
 state = Server()
 
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    try:
+        state.load()
+        logger.info("pipeline loaded and warmed up")
+    except Exception:
+        logger.exception("pipeline failed to load — /query will 503")
+    yield
+
+
 def create_app() -> FastAPI:
-    app = FastAPI(title="Voice-Enabled RAG", version=APP_VERSION)
+    app = FastAPI(title="Voice-Enabled RAG", version=APP_VERSION, lifespan=_lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -73,13 +88,9 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    @app.on_event("startup")
-    async def _startup() -> None:
-        try:
-            state.load()
-            logger.info("pipeline loaded and warmed up")
-        except Exception:
-            logger.exception("pipeline failed to load — /query will 503")
+    @app.get("/", include_in_schema=False)
+    async def index() -> FileResponse:
+        return FileResponse(STATIC_DIR / "index.html")
 
     @app.get("/health", response_model=_Health)
     async def health() -> _Health:
@@ -114,7 +125,7 @@ def create_app() -> FastAPI:
         data = await audio.read()
         tmp.write_bytes(data)
         try:
-            return state.pipeline.process_audio(tmp).model_dump()
+            return (await state.pipeline.process_audio(tmp)).model_dump()
         finally:
             tmp.unlink(missing_ok=True)
 
