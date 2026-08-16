@@ -45,8 +45,10 @@ machine-checkable status.
 - [~] HF Spaces deploy staged (`space/`) but Docker Spaces now need PRO subscription — tunnel chosen instead
 
 ## Day 7-8 — Demo Prep & Submission
-- [ ] Real numbers in EVALUATION.md / LATENCY_BENCHMARK.md
+- [x] Real numbers in EVALUATION.md / LATENCY_BENCHMARK.md
 - [x] Final validation sweep (tests, lint, secrets, TODOs, docs)
+- [~] Fresh-clone dry-run (README Option B) — in progress
+- [~] Release: tag + GitHub Release + CHANGELOG — in progress
 
 ## Environment
 - GPU: RTX 4050 Laptop (CUDA available), 16.8 GB RAM
