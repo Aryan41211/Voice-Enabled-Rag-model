@@ -5,6 +5,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+# `python scripts/entrypoint.py` puts /app/scripts on sys.path, not /app —
+# make the repo root importable so `app` resolves regardless of invocation.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 
 def main() -> None:
     lang = os.environ.get("DATA_LANG", "hi")

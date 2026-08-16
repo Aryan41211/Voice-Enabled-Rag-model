@@ -57,6 +57,8 @@ PORT=8000
 ## Containerized Deploy
 The repo ships `Dockerfile` + `docker-compose.yml`. `scripts/entrypoint.py` checks for the built index and rebuilds it on first boot (only the selected `DATA_STRATEGY`), so `docker compose up --build` is the fastest path to a live link. Pre-build the index locally and bake it into the image for faster startup — index build time is not part of your latency budget, but startup time matters for demo reliability.
 
+Validated end-to-end on Docker Desktop: image builds (torch CUDA-13 stack, ~8.9 GB — plan ~10 GB free disk and a patient connection; the pinned pip flags `--timeout 120 --retries 8` handle flaky PyPI), first boot rebuilds the index in-container, then `/health` and `/query` verified on host port 8001. To reuse a locally built index instead of rebuilding on first boot, mount it into the container: `docker run -p 8001:8000 -v /abs/path/to/data/index:/app/data/index <image>`.
+
 ## Steps
 1. Build the offline index (`python -m app.ingestion.build_index --lang hi --strategies metadata`), optionally bake into the image.
 2. `docker compose up --build`, then `curl localhost:8000/health`.

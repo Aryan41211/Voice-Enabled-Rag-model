@@ -23,6 +23,7 @@ All notable changes to this project during the HH Goa 2026 sprint. Format loosel
 - `v0.1.0` release tagged + GitHub Release published
 - Test coverage raised to ~80% (116 tests, up from 90/70%): on-disk index load path, `Pipeline.from_index` wiring, STT retry+backoff and hard-failure refusals, circuit-breaker trip + success reset, generation error/fallback paths, uncited-answer fail-closed fallback, semantic batched chunking, guardrail edge cases
 - Docs synced to implemented reality: `API.md` timings schema, `ARCHITECTURE.md` (actual STT flow, dense-only rationale), LICENSE holder filled
+- Docker runtime validated live: image build (torch/CUDA-13, 8.9 GB) → first-boot index build → `/health` + `/query` verified in-container on host port 8001 with prebuilt index mount. Fixes surfaced by real-container validation: `python scripts/entrypoint.py` put `/app/scripts` on `sys.path` (not `/app`) so uvicorn's `app.api.server` import failed — now `sys.path.insert` + `CMD python -m scripts.entrypoint`; pip hardened with `--timeout 120 --retries 8` for flaky PyPI; `start_demo.ps1` health probe no longer hardcodes version (checks `strategy`/`stt_provider` fields — actual `APP_VERSION` is `0.1.0`)
 
 ---
 

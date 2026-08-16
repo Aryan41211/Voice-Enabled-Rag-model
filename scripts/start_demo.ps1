@@ -24,7 +24,7 @@ function Test-OurHealth {
     param([int]$p)
     try {
         $r = Invoke-RestMethod -Uri "http://127.0.0.1:$p/health" -TimeoutSec 3
-        return ($r.status -eq 'ok' -and $r.version -eq '1.0')
+        return ($r.status -eq 'ok' -and $null -ne $r.strategy -and $null -ne $r.stt_provider)
     } catch { return $false }
 }
 
