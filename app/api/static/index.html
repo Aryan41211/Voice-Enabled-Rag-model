@@ -104,9 +104,16 @@ async function postText(text) {
 function downsample(data, fromRate, toRate) {
   if (fromRate === toRate) return data;
   const ratio = fromRate / toRate;
-  const n = Math.floor(data.length / ratio);
+  const n = Math.max(1, Math.floor(data.length / ratio));
   const out = new Float32Array(n);
-  for (let i = 0; i < n; i++) out[i] = data[Math.floor(i * ratio)];
+  for (let i = 0; i < n; i++) {
+    const pos = i * ratio;
+    const i0 = Math.floor(pos);
+    const frac = pos - i0;
+    const s0 = data[i0];
+    const s1 = data[Math.min(i0 + 1, data.length - 1)];
+    out[i] = s0 + (s1 - s0) * frac;
+  }
   return out;
 }
 
@@ -129,10 +136,17 @@ function encodeWav(samples, sampleRate) {
 }
 
 async function webmToWav(blob) {
-  const ctx = new AudioContext({ sampleRate: 16000 });
+  // OfflineAudioContext(1, 1, 16000) pins the context rate, so decodeAudioData
+  // resamples the recording to exactly 16 kHz with the engine's high-quality
+  // resampler. A live AudioContext({sampleRate:16000}) is a *suggestion* the
+  // browser may ignore (falling back to the 44.1/48 kHz hardware rate), and
+  // nearest-neighbor downsampling of that alias-prone. downsample() below is
+  // only a defensive fallback for engines that return the buffer at its
+  // native rate.
+  const ctx = new OfflineAudioContext(1, 1, 16000);
   const audio = await ctx.decodeAudioData(await blob.arrayBuffer());
   const mono = audio.getChannelData(0);
-  const pcm = downsample(mono, audio.sampleRate, 16000);
+  const pcm = audio.sampleRate === 16000 ? mono : downsample(mono, audio.sampleRate, 16000);
   return new Blob([encodeWav(pcm, 16000)], { type: "audio/wav" });
 }
 
