@@ -129,7 +129,7 @@ voice-rag/
 │   └── results/
 ├── data/                   # cached MSMARCO-XI subset + built index
 ├── scripts/entrypoint.py   # container entrypoint (builds index if missing)
-├── tests/                  # 88 passing: unit + integration + adversarial
+├── tests/                  # 90 passing: unit + integration + adversarial
 ├── Dockerfile / docker-compose.yml / .github/workflows/ci.yml
 ├── requirements.txt
 └── .env.example
@@ -146,9 +146,9 @@ voice-rag/
 
 ## 9. Links
 
-- Live demo: `<TBD>`
+- Live demo: launch `powershell -ExecutionPolicy Bypass -File scripts/start_demo.ps1` — it starts the API and prints a public `https://…trycloudflare.com` URL (fresh per run; laptop must stay on). See [DEPLOYMENT.md](./DEPLOYMENT.md).
 - Video 1 (process, 90s): `<TBD>`
-- Video 2 (demo): `<TBD>`
+- Video 2 (demo): `<TBD>` — scripted in [DEMO_SCRIPT.md](./DEMO_SCRIPT.md)
 - Submission form: https://forms.gle/MNvCjcv23Hn2Eeu58
 
 Every social post → tag **#RAGInGoa**, by **every** team member, on IG + X + LinkedIn. See [SUBMISSION_CHECKLIST.md](./SUBMISSION_CHECKLIST.md).
@@ -165,6 +165,7 @@ Every social post → tag **#RAGInGoa**, by **every** team member, on IG + X + L
 | [API.md](./API.md) | Internal request/response schemas between pipeline stages |
 | [TESTING.md](./TESTING.md) | Test plan per layer (unit, integration, guardrail adversarial tests) |
 | [DEPLOYMENT.md](./DEPLOYMENT.md) | How to stand up the live demo link, latency-safe hosting choices |
+| [DEMO_SCRIPT.md](./DEMO_SCRIPT.md) | Scripted end-to-end demo + Video 2 shot list |
 | [ROADMAP.md](./ROADMAP.md) | Day-by-day 8-day execution plan |
 | [SUBMISSION_CHECKLIST.md](./SUBMISSION_CHECKLIST.md) | Every deliverable + promotion requirement, tracked |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | Team git workflow |

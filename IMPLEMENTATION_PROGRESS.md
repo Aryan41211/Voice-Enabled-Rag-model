@@ -46,7 +46,7 @@ machine-checkable status.
 
 ## Day 7-8 — Demo Prep & Submission
 - [ ] Real numbers in EVALUATION.md / LATENCY_BENCHMARK.md
-- [ ] Final validation sweep (tests, lint, secrets, TODOs, docs)
+- [x] Final validation sweep (tests, lint, secrets, TODOs, docs)
 
 ## Environment
 - GPU: RTX 4050 Laptop (CUDA available), 16.8 GB RAM

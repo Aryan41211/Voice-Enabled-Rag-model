@@ -98,7 +98,11 @@ def test_to_pcm_converts_wav(tmp_path):
 
 
 def test_no_key_raises(monkeypatch):
-    monkeypatch.setattr("app.config.get_settings", lambda: _settings(sarvam_api_key=""))
+    # patch the client module's bound reference, not app.config, so the test is
+    # hermetic even when a real .env (with a key) is present locally
+    monkeypatch.setattr(
+        "app.stt.client.get_settings", lambda: _settings(sarvam_api_key="")
+    )
     stt = SarvamSTT(api_key="")
     try:
         asyncio.run(stt.transcribe("x.wav"))

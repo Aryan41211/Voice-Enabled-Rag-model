@@ -38,7 +38,7 @@ No resubmissions allowed — build with a "final by Day 7, polish on Day 8" mind
 ## Day 7 (Aug 21) — Demo Prep & Polish
 - [ ] Record Video 1 (process, 90s) — show the team actually working, not the product
 - [ ] Record Video 2 (full demo) — include a live "guardrail refuses to answer" moment, live latency numbers on screen
-- [ ] Finalize README + EVALUATION.md with real numbers filled in (not placeholders)
+- [x] Finalize README + EVALUATION.md with real numbers filled in (not placeholders)
 - [ ] Internal dry-run: fresh clone → run instructions actually work; live link tested from a different network
 
 ## Day 8 (Aug 22) — Submission Day
