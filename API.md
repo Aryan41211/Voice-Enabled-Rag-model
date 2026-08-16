@@ -33,8 +33,9 @@ Multipart `audio` file (WAV; STT converts to PCM). Response is the same `QueryRe
     {"chunk_id": "string", "passage": "string", "score": 0.0, "strategy": "metadata"}
   ],
   "timings_ms": {
-    "stt": 0, "input_guardrail": 0, "retrieval": 0,
-    "retrieval_guardrail": 0, "generation": 0, "output_guardrail": 0, "total_ms": 0
+    "stt_ms": 0, "input_guardrail_ms": 0, "retrieval_ms": 0,
+    "retrieval_guardrail_ms": 0, "generation_ms": 0, "ttft_ms": 0,
+    "output_guardrail_ms": 0, "total_ms": 0
   },
   "schema_version": "1.0"
 }
@@ -46,10 +47,10 @@ Multipart `audio` file (WAV; STT converts to PCM). Response is the same `QueryRe
 ```python
 class Transcript(BaseModel):
     text: str
-    language: str
-    confidence: float
-    is_final: bool
-    stt_latency_ms: float
+    language: str = "hi"
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    is_final: bool = True
+    stt_latency_ms: float = Field(default=0.0, ge=0.0)
 ```
 
 ### `GuardrailResult` (Guardrail → Retrieval, or Guardrail → short-circuit response)
@@ -57,8 +58,8 @@ class Transcript(BaseModel):
 class GuardrailResult(BaseModel):
     passed: bool
     layer: Literal["input", "retrieval", "output"]
-    reason: str | None
-    action: Literal["proceed", "refuse", "clarify"]
+    reason: str | None = None
+    action: Literal["proceed", "refuse", "clarify"] = "proceed"
 ```
 
 ### `RetrievedChunk` (Retrieval → Generation)
@@ -66,10 +67,10 @@ class GuardrailResult(BaseModel):
 class RetrievedChunk(BaseModel):
     chunk_id: str
     text: str
-    score: float
-    source: Literal["dense", "sparse", "hybrid"]
-    strategy: str  # which chunking strategy produced this chunk
-    metadata: dict
+    score: float = 0.0
+    source: Literal["dense", "sparse", "hybrid"] = "hybrid"
+    strategy: str = ""  # which chunking strategy produced this chunk
+    metadata: dict = Field(default_factory=dict)
 ```
 
 ### `RetrievalResult` (Retrieval → Guardrail Layer 2 → Generation)

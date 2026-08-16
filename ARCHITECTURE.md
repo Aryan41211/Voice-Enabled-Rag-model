@@ -10,22 +10,23 @@
 5. Also build a BM25 sparse index over the same chunks for hybrid retrieval.
 
 ### Stage 1 — Voice Input → Transcript
-- Client captures mic audio (WAV/PCM 16kHz per Sarvam's requirements) and streams over WebSocket to Sarvam `saaras:v3-realtime`.
-- Use `vad` mode so Sarvam's server-side VAD auto-detects speech start/end — avoids client-side silence-detection bugs.
-- Emit **partial transcripts** to the UI immediately (perceived latency), but only send the **final** transcript downstream into retrieval.
+- Browser mic → `MediaRecorder` → decoded + downsampled to 16 kHz mono PCM WAV in JS (`app/api/static/index.html`) → uploaded to `POST /v1/voice`.
+- Server converts the WAV to raw linear16 PCM and streams it to Sarvam `saaras:v3-realtime` over WebSocket (`vad` endpointing, `stream_type=balanced`).
 - Fallback: if the Sarvam WebSocket fails or times out, fall back to Sarvam's REST batch STT endpoint (harness responsibility, see §3).
+- Only the **final** transcript goes downstream into retrieval/guardrails.
 
 ### Stage 2 — Query Guardrail (pre-retrieval)
 - Cheap, fast checks *before* spending retrieval/generation budget:
-  - Empty/garbage transcript → ask user to repeat.
-  - Off-topic / out-of-domain check (is this even an MS MARCO-style factual question?).
-  - Unsafe content check (basic keyword + classifier).
+  - Empty/garbage/too-short transcript → ask user to repeat.
+  - Unsafe-content keyword gate + out-of-scope domain keyword gate → refuse.
+  - Retrieval-side (Layer 2) scoring checks: top-score floor and top-1-vs-background isolation margin, calibrated on eval gold → refuse when nothing relevant.
+- An embedding-based off-topic classifier was built and **removed after evaluation proved it useless** (see GUARDRAILS.md / EVALUATION.md §6).
 - See `GUARDRAILS.md` for full detail.
 
 ### Stage 3 — Retrieval
 - Embed the query with the same embedding model used at indexing.
-- Run **hybrid retrieval**: dense (ANN, top-k) + sparse (BM25, top-k) → merge with reciprocal rank fusion (RRF) or weighted score.
-- Optional cross-encoder re-rank of the top ~20 → top 3–5 (only if latency budget allows — measure separately and make it toggleable).
+- **Dense ANN retrieval (FAISS)** over `metadata`-aware passage chunks is the live path — it won the 300-query eval (MRR 0.452, R@5 0.709).
+- Hybrid dense+BM25 (RRF) and cross-encoder re-rank were implemented and **measured, then excluded from the live path**: RRF *hurt* Hindi retrieval (MRR 0.452 → 0.397) and the reranker added ~345 ms for +8.4 R@5 — both stay available behind toggles (`hybrid`, `rerank`).
 - Return passages + metadata + retrieval scores.
 
 ### Stage 4 — Generation
@@ -53,6 +54,8 @@
 
 STT latency is reported **separately** — it's a distinct upstream stage with its own claimed <150ms TTFT (Sarvam), not part of the "chunking→retrieval→output" budget the brief describes.
 
+**Measured (110 real Hindi queries, extractive generation):** retrieval-only P50 15.2 / P70 19.4 / P100 40.2 ms; retrieval+full generation P50 15.0 ms. Real voice round-trip over the live link: ~1.0 s total (STT-bound). Full tables in `LATENCY_BENCHMARK.md`.
+
 ## 3. Harness (Orchestration Layer)
 
 This is what makes it a "real pipeline" instead of a script. Implement as an explicit orchestrator (plain `asyncio` state machine, or LangGraph/LlamaIndex workflow if your team prefers a framework):
@@ -68,4 +71,4 @@ This is what makes it a "real pipeline" instead of a script. Implement as an exp
 
 - **Sarvam over ElevenLabs**: brief allows either; Sarvam is purpose-built for Indian languages and pairs naturally with MSMARCO-XI's Indic language set — an easier story to tell in your demo video than routing Indic audio through a Western-language-first STT.
 - **FAISS over a hosted vector DB for the demo**: no network hop = lower latency, no external dependency to fail during judging. Use Qdrant only if you need persistence/filtering across restarts and are comfortable running it locally/dockerized (still on localhost, not a remote hosted instance, to protect latency).
-- **Hybrid (dense+sparse) over dense-only**: MS MARCO is a lexical-heavy benchmark historically — BM25 alone is a strong baseline; combining with dense retrieval reduces failure modes from pure-embedding retrieval on short factual queries.
+- **Dense-only over hybrid (dense+BM25)**: expected MS MARCO to be lexical-heavy, but our 300-query Hindi eval showed RRF *hurting* dense-only results (MRR 0.452 → 0.397) — surface-form matching is weak in Hindi (morphology/transliteration), so sparse hits down-rank good dense ones. Dense-only is the live path; hybrid stays behind a toggle. See EVALUATION.md.
