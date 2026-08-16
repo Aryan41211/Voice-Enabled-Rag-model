@@ -39,7 +39,8 @@ No resubmissions allowed — build with a "final by Day 7, polish on Day 8" mind
 - [ ] Record Video 1 (process, 90s) — show the team actually working, not the product
 - [ ] Record Video 2 (full demo) — include a live "guardrail refuses to answer" moment, live latency numbers on screen
 - [x] Finalize README + EVALUATION.md with real numbers filled in (not placeholders)
-- [~] Internal dry-run: fresh clone → run instructions actually work (in progress — README Option B verified via a real fresh clone); live link tested from a different network (needs a phone — user)
+- [x] Internal dry-run: fresh clone → README Option B works end-to-end (venv install, tiny index build, 6/6 smoke, bench, server boot + /health /query /)
+- [ ] Live link tested from a different network (needs a phone — user task)
 
 ## Day 8 (Aug 22) — Submission Day
 - [~] Final GitHub push, tag a release, update CHANGELOG.md (in progress this sweep)

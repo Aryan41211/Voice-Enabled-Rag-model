@@ -47,7 +47,7 @@ machine-checkable status.
 ## Day 7-8 — Demo Prep & Submission
 - [x] Real numbers in EVALUATION.md / LATENCY_BENCHMARK.md
 - [x] Final validation sweep (tests, lint, secrets, TODOs, docs)
-- [~] Fresh-clone dry-run (README Option B) — in progress
+- [x] Fresh-clone dry-run (README Option B) — venv install, tiny index, 6/6 smoke, bench, server boot; caught+fixed missing `python-multipart`
 - [~] Release: tag + GitHub Release + CHANGELOG — in progress
 
 ## Environment

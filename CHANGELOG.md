@@ -14,7 +14,11 @@ All notable changes to this project during the HH Goa 2026 sprint. Format loosel
 - Cross-encoder reranker (`app/retrieval/rerank.py`) — ablation in EVALUATION.md
 - Generation stage (`app/generation/`): extractive fallback + optional streaming LLM with TTFT + forced citations
 - 3-layer guardrail stack (`app/guardrails/`): input (garbage/unsafe/off-topic), retrieval (score floor + isolation margin), output (citation + groundedness)
-- Guardrail adversarial test set (`tests/adversarial/`)
+### Fixed
+- `python-multipart` missing from `requirements.txt` — `/v1/voice` (multipart upload route) failed to boot on fresh installs; caught by the fresh-clone dry-run and fixed
+
+### Added
+- Fresh-clone dry-run verified (README Option B end-to-end on a clean checkout): venv install → tiny index build → 6/6 gold smoke queries → latency bench → server boots → `/health`, `/query`, `/` all 200
 
 ---
 
@@ -27,7 +31,7 @@ All notable changes to this project during the HH Goa 2026 sprint. Format loosel
 - Expanded unsafe-keyword coverage incl. self-harm variants + standalone `बम`
 - Latency benchmark (`benchmarks/run_latency_bench.py`) + results: retrieval P50 15.2 / P70 19.4 / P100 40.2 ms on 110 real queries → LATENCY_BENCHMARK.md
 - Dockerfile + docker-compose.yml + `scripts/entrypoint.py` (auto-builds index on first boot) + `.dockerignore`
-- GitHub Actions CI (`ci.yml`) running the full 88-test suite on Ubuntu (no model downloads in tests)
+- GitHub Actions CI (`ci.yml`) running the full 90-test suite on Ubuntu (no model downloads in tests)
 - API tests (`tests/integration/test_api.py`), eval script bootstrap + warm-up fix
 - Browser voice UI served at `/` (self-contained HTML: mic → 16 kHz WAV → `/v1/voice`, text fallback → `/query`)
 - Live demo launcher (`scripts/start_demo.ps1`): starts the API and opens a free cloudflared https tunnel — public link verified end-to-end
@@ -36,7 +40,7 @@ All notable changes to this project during the HH Goa 2026 sprint. Format loosel
 ### Notes
 - Chosen stack: `metadata` chunking + dense-only retrieval (hybrid/RRF hurt Hindi retrieval; reranker excluded — too slow for budget)
 - Live STT/hosted-LLM paths are key-gated (`STT_PROVIDER`, `LLM_PROVIDER`); extractive generation is the offline default
-- CI fully green on GitHub Actions: lint (ruff) + 88 tests + real-stack e2e smoke + **real Sarvam STT round-trip** (hi-IN, exact transcript match) using the `SARVAM_API_KEY` repo secret
+- CI fully green on GitHub Actions: lint (ruff) + 90 tests + real-stack e2e smoke + **real Sarvam STT round-trip** (hi-IN, exact transcript match) using the `SARVAM_API_KEY` repo secret
 
 ---
 
