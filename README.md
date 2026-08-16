@@ -129,7 +129,7 @@ voice-rag/
 │   └── results/
 ├── data/                   # cached MSMARCO-XI subset + built index
 ├── scripts/entrypoint.py   # container entrypoint (builds index if missing)
-├── tests/                  # 90 passing: unit + integration + adversarial
+├── tests/                  # 116 passing (~80% coverage): unit + integration + adversarial
 ├── Dockerfile / docker-compose.yml / .github/workflows/ci.yml
 ├── requirements.txt
 └── .env.example

@@ -21,6 +21,8 @@ All notable changes to this project during the HH Goa 2026 sprint. Format loosel
 - Fresh-clone dry-run verified (README Option B end-to-end on a clean checkout): venv install → tiny index build → 6/6 gold smoke queries → latency bench → server boots → `/health`, `/query`, `/` all 200
 - Live link re-verified over a public tunnel: real Sarvam voice round-trip (exact transcript, ~994 ms total), Hindi text query answered, out-of-scope query refused honestly
 - `v0.1.0` release tagged + GitHub Release published
+- Test coverage raised to ~80% (116 tests, up from 90/70%): on-disk index load path, `Pipeline.from_index` wiring, STT retry+backoff and hard-failure refusals, circuit-breaker trip + success reset, generation error/fallback paths, uncited-answer fail-closed fallback, semantic batched chunking, guardrail edge cases
+- Docs synced to implemented reality: `API.md` timings schema, `ARCHITECTURE.md` (actual STT flow, dense-only rationale), LICENSE holder filled
 
 ---
 
@@ -42,7 +44,7 @@ All notable changes to this project during the HH Goa 2026 sprint. Format loosel
 ### Notes
 - Chosen stack: `metadata` chunking + dense-only retrieval (hybrid/RRF hurt Hindi retrieval; reranker excluded — too slow for budget)
 - Live STT/hosted-LLM paths are key-gated (`STT_PROVIDER`, `LLM_PROVIDER`); extractive generation is the offline default
-- CI fully green on GitHub Actions: lint (ruff) + 90 tests + real-stack e2e smoke + **real Sarvam STT round-trip** (hi-IN, exact transcript match) using the `SARVAM_API_KEY` repo secret
+- CI fully green on GitHub Actions: lint (ruff) + 116 tests (~80% coverage) + real-stack e2e smoke + **real Sarvam STT round-trip** (hi-IN, exact transcript match) using the `SARVAM_API_KEY` repo secret
 
 ---
 
