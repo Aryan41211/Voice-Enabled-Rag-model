@@ -105,8 +105,8 @@ def _to_pcm(audio_path: str | Path) -> bytes:
         raw = path.read_bytes()
 
     pcm = _normalize_pcm(raw, rate, channels)
-    logger.debug(
-        "stt audio buffer: source=%s -> %d Hz mono 16-bit, %d bytes, %.2fs",
+    logger.info(
+        "stt buffer: source=%s -> %d Hz mono 16-bit, %d bytes, %.2fs",
         source,
         TARGET_SAMPLE_RATE,
         len(pcm),
@@ -160,6 +160,9 @@ class SarvamSTT:
             if not exc.retryable:
                 raise
             # WS path is best-effort; fall back to REST batch.
+            logger.warning(
+                "Sarvam realtime unavailable (%s); falling back to REST", exc
+            )
             return await self._transcribe_rest(audio_path)
 
     async def _transcribe_ws(self, audio_path: str | Path) -> Transcript:
@@ -185,7 +188,9 @@ class SarvamSTT:
                 additional_headers={"api-subscription-key": self.api_key},
                 open_timeout=self.timeout_s,
             ) as ws:
+                n_chunks = 0
                 for i in range(0, len(pcm), AUDIO_CHUNK_BYTES):
+                    n_chunks += 1
                     await ws.send(
                         json.dumps(
                             {
@@ -197,18 +202,26 @@ class SarvamSTT:
                         )
                     )
                 await ws.send(json.dumps({"event": "end"}))
+                logger.debug(
+                    "stt ws: streamed %d chunks (%.1fs audio)",
+                    n_chunks,
+                    len(pcm) / 32000,
+                )
 
                 final_parts: list[str] = []
                 async for message in ws:
                     try:
                         data = json.loads(message)
                     except json.JSONDecodeError:
+                        logger.debug("stt ws: non-JSON message ignored")
                         continue
                     event = data.get("event")
+                    logger.debug("stt ws: event=%s", event)
                     if event == "transcript.final":
                         text = (data.get("text") or "").strip()
                         if text:
                             final_parts.append(text)
+                            logger.debug("stt ws: final[%d]=%r", len(final_parts), text)
                     elif event == "error":
                         fatal = bool(data.get("is_fatal", True))
                         raise STTError(
@@ -222,6 +235,11 @@ class SarvamSTT:
                 # multi-utterance input (natural pauses) is not truncated to the
                 # first sentence.
                 final_text = " ".join(final_parts).strip()
+                logger.debug(
+                    "stt ws: session ended, %d final(s) -> %r",
+                    len(final_parts),
+                    final_text,
+                )
         except STTError:
             raise
         except Exception as exc:  # network / handshake / send failures
@@ -257,6 +275,12 @@ class SarvamSTT:
         except httpx.HTTPError as exc:
             raise STTError(f"Sarvam REST failed: {exc}", retryable=True)
 
+        logger.info(
+            "stt rest: %s in %.0fms (%d bytes)",
+            resp.status_code,
+            (time.perf_counter() - t0) * 1000,
+            len(files["file"][1]),
+        )
         if resp.status_code >= 400:
             raise STTError(
                 f"Sarvam REST HTTP {resp.status_code}: {resp.text[:200]}",
