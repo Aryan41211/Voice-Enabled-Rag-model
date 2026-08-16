@@ -6,7 +6,14 @@ import wave
 
 import app.stt.client as sttmod
 from app.harness.schemas import STTError
-from app.stt.client import SarvamSTT, _to_pcm
+from app.stt.client import DEFAULT_REST_URL, SarvamSTT, _to_pcm
+
+
+def test_rest_url_matches_documented_endpoint():
+    # Verified against Sarvam docs (2026): the synchronous REST endpoint is
+    # POST https://api.sarvam.ai/speech-to-text (no /v1 prefix). The old
+    # /v1/speech-to-text path returns 404 and silently kills the fallback.
+    assert DEFAULT_REST_URL == "https://api.sarvam.ai/speech-to-text"
 
 
 class FakeWSResult:

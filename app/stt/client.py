@@ -7,7 +7,7 @@ endpoint (files < 30 s), per ROADMAP Day 5.
 
 Endpoints (Sarvam docs):
 * WS:  ``wss://api.sarvam.ai/speech-to-text-realtime/ws``
-* REST: ``https://api.sarvam.ai/v1/speech-to-text``
+* REST: ``https://api.sarvam.ai/speech-to-text``
 Auth header for both: ``api-subscription-key``.
 """
 
@@ -25,7 +25,7 @@ from app.config import get_settings
 from app.harness.schemas import STTError, Transcript
 
 DEFAULT_WS_URL = "wss://api.sarvam.ai/speech-to-text-realtime/ws"
-DEFAULT_REST_URL = "https://api.sarvam.ai/v1/speech-to-text"
+DEFAULT_REST_URL = "https://api.sarvam.ai/speech-to-text"
 LANGUAGE_CODES = {
     "hi": "hi-IN",
     "en": "en-IN",
