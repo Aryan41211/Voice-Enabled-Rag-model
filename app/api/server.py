@@ -120,7 +120,11 @@ def create_app() -> FastAPI:
                 status_code=503,
                 detail="STT is not configured (set SARVAM_API_KEY or STT_PROVIDER=fake)",
             )
-        tmp = Path(settings.index_dir) / "tmp" / audio.filename or "upload.wav"
+        # Sanitize: keep only the basename so a client-supplied filename can
+        # never escape the temp dir (also tolerates filename=None).
+        tmp = (
+            Path(settings.index_dir) / "tmp" / Path(audio.filename or "upload.wav").name
+        )
         tmp.parent.mkdir(parents=True, exist_ok=True)
         data = await audio.read()
         tmp.write_bytes(data)

@@ -82,6 +82,33 @@ def test_voice_endpoint_returns_response(monkeypatch):
         assert body["answer"] == "दिल्ली"
 
 
+def test_voice_sanitizes_upload_filename(monkeypatch):
+    import pathlib
+
+    monkeypatch.setattr(server.state, "load", lambda: None)
+    monkeypatch.setattr(server.state, "pipeline", _fake_pipeline())
+    monkeypatch.setattr(server.state, "ready", True)
+
+    written = []
+    real_write = pathlib.Path.write_bytes
+
+    def capturing_write(self, data):
+        written.append(str(self))
+        return real_write(self, data)
+
+    monkeypatch.setattr(pathlib.Path, "write_bytes", capturing_write)
+    with TestClient(server.create_app()) as client:
+        r = client.post(
+            "/v1/voice",
+            files={"audio": ("..\\..\\evil.wav", b"fake", "audio/wav")},
+        )
+        assert r.status_code == 200
+    assert written
+    # basename is kept, traversal components are stripped
+    assert written[0].endswith("evil.wav")
+    assert ".." not in written[0].split("tmp")[-1]
+
+
 def test_health_503_when_not_loaded(monkeypatch):
     monkeypatch.setattr(server.state, "load", lambda: None)
     monkeypatch.setattr(server.state, "pipeline", None)
