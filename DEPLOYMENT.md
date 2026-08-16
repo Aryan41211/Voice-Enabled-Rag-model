@@ -26,7 +26,8 @@ winget install Cloudflare.cloudflared
 # 2. Add your Sarvam key so live voice works (optional; text queries work without it)
 #    add SARVAM_API_KEY=sk_... to .env
 
-# 3. Start the demo (starts the API on :8000, waits for it, then opens the tunnel)
+# 3. Start the demo (starts the API on :8000 — auto-picks the next free port if
+#    8000 is taken by another service — waits for it, then opens the tunnel)
 powershell -ExecutionPolicy Bypass -File scripts/start_demo.ps1
 ```
 

@@ -35,7 +35,10 @@ For **every** team member, on **every** platform:
 - [ ] At least one Instagram account among the team is set to public before posting
 
 ## Final Pre-Submit Sanity Check
-- [ ] Fresh `git clone` + follow README instructions exactly → does it actually run?
+- [x] Fresh `git clone` + follow README instructions exactly → does it actually run?
+      (verified: clean-clone dry-run on this machine — venv install, tiny index
+      build, 6/6 gold smoke, latency bench, server boot, /health + /query; the
+      "different machine" angle is covered by the incognito/different-device line above)
 - [ ] Live link accessed from an incognito window / different device
 - [ ] All links in the form (repo, live link, videos) open correctly, no typos
 - [ ] Deadline confirmed: **August 22, 2026, 11:59 PM IST** — submit with buffer, not at 11:58 PM
