@@ -41,6 +41,7 @@ machine-checkable status.
 - [x] P50/P70/P100 on 110 real queries → LATENCY_BENCHMARK.md (retrieval P50 15.2 / P70 19.4 / P100 40.2 ms)
 - [x] FastAPI backend (`app/api/server.py`: /health, /query, /v1/voice) + browser voice UI at `/` + API tests
 - [x] Dockerfile + docker-compose.yml + entrypoint + .dockerignore + CI
+- [x] Docker runtime validated end-to-end (image build ~8.9 GB, in-container first-boot index build, /health + /query on host :8001); fixed container-only bug — `python scripts/entrypoint.py` left `/app` off sys.path so uvicorn import failed → `CMD python -m scripts.entrypoint` + `sys.path` insert
 - [x] Live link via free cloudflared tunnel (`scripts/start_demo.ps1`) — verified /health + /query over public https
 - [x] Live link re-verified end-to-end over public tunnel: real Sarvam voice (exact transcript, 993 ms total), Hindi text query answered, unsupported query refused honestly
 - [~] HF Spaces deploy staged (`space/`) but Docker Spaces now need PRO subscription — tunnel chosen instead
