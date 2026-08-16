@@ -10,8 +10,11 @@ from app.ingestion.chunking import (
     SentenceWindowChunker,
     approx_tokens,
     chunk_example,
+    chunk_examples,
+    group_by_similarity,
     split_sentences,
 )
+from app.ingestion.chunking import _cosine
 
 
 def _example(text="परीक्षण पाठ।", n_passages=2, selected=(1, 0)):
@@ -131,3 +134,57 @@ def test_chunk_example_unknown_strategy_raises():
         pass
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_cosine_zero_norm_returns_zero():
+    assert _cosine([0, 0], [1, 2]) == 0.0
+
+
+def test_group_by_similarity_empty():
+    assert group_by_similarity([], [], 0.5, 8) == []
+
+
+def test_group_by_similarity_respects_max_sentences():
+    vecs = np.asarray([[1, 0], [1, 0.01], [1, 0.02], [1, 0.03]], dtype="float32")
+    groups = group_by_similarity(
+        ["s0", "s1", "s2", "s3"], vecs, threshold=0.5, max_sentences=2
+    )
+    assert groups == [["s0", "s1"], ["s2", "s3"]]
+
+
+def test_semantic_group_sentences_empty():
+    assert SemanticChunker().group_sentences([]) == []
+
+
+def test_chunk_example_hierarchical_skips_empty_passage():
+    ex = {
+        "query_id": 7,
+        "target_lang": "hin_Deva",
+        "passages": {
+            "Translated_passages": ["", "कुछ पाठ।"],
+            "is_selected": [0, 1],
+        },
+    }
+    chunks = chunk_example(ex, "hierarchical")
+    assert [c.passage_index for c in chunks] == [1]
+
+
+def test_chunk_examples_semantic_batched_merges():
+    ex = _example("पहला वाक्य। दूसरा वाक्य।", n_passages=2, selected=(1, 0))
+    chunks = chunk_examples(
+        [ex], "semantic", embedder=FakeEmbedder(), semantic_threshold=0.0
+    )
+    assert len(chunks) == 2
+    assert chunks[0].text == "पहला वाक्य। दूसरा वाक्य।"
+    assert chunks[0].strategy == "semantic"
+    assert chunks[1].passage_is_selected == 0
+
+
+def test_chunk_examples_max_examples_cap():
+    ex1, ex2 = _example("पहला।"), _example("दूसरा।")
+    batched = chunk_examples(
+        [ex1, ex2], "semantic", embedder=FakeEmbedder(), max_examples=1
+    )
+    assert len(batched) == 2  # only ex1's 2 passages, not ex2's too
+    plain = chunk_examples([ex1, ex2], "metadata", max_examples=1)
+    assert len(plain) == 2

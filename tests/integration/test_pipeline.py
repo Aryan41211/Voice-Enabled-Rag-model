@@ -13,9 +13,18 @@ from app.guardrails.guardrails import (
     RetrievalGuardrail,
 )
 from app.harness.pipeline import CircuitBreaker, Pipeline
+from app.harness.schemas import (
+    Answer,
+    GenerationError,
+    RetrievedChunk,
+    RetrievalError,
+    STTError,
+    Transcript,
+)
 from app.ingestion.chunking import Chunk
 from app.retrieval.retrievers import DenseRetriever
 from app.stt.client import FakeSTT
+from tests.integration.test_index_load import _write_index
 
 
 class FakeEmbedder:
@@ -168,3 +177,131 @@ def test_circuit_breaker_half_open_after_reset():
 
     time.sleep(0.3)
     assert not cb.is_open
+
+
+class FlakySTT:
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.calls = 0
+
+    async def transcribe(self, audio_path):
+        self.calls += 1
+        if self.calls == 1:
+            raise STTError("websocket dropped", retryable=True)
+        return Transcript(text=self.text)
+
+
+class FailingSTT:
+    async def transcribe(self, audio_path):
+        raise STTError("invalid audio", retryable=False)
+
+
+class FailingRetriever:
+    def search(self, query_vec, k=5, query_text=""):
+        raise RetrievalError("index file missing")
+
+
+class FakeLLMGenerator:
+    name = "fake-llm"
+
+    def __init__(self, answer: Answer | None = None, exc: Exception | None = None):
+        self.answer = answer
+        self.exc = exc
+        self.calls = 0
+
+    async def generate(self, query: str, chunks: list[RetrievedChunk]) -> Answer:
+        self.calls += 1
+        if self.exc is not None:
+            raise self.exc
+        if self.answer is None:
+            raise GenerationError("no fake answer configured")
+        return self.answer
+
+
+def test_pipeline_from_index_wiring(tmp_path, monkeypatch):
+    _write_index(tmp_path)
+    monkeypatch.setattr("app.harness.pipeline.Embedder", FakeEmbedder)
+    monkeypatch.setattr("app.harness.pipeline.make_generator", ExtractiveGenerator)
+    monkeypatch.setattr("app.guardrails.guardrails.Embedder", FakeEmbedder)
+
+    p = Pipeline.from_index(lang="hi", strategy="metadata", index_dir=tmp_path)
+    resp = p.query("दिल्ली कहाँ है")
+    assert resp.refused is False
+    assert "दिल्ली" in resp.answer
+    assert resp.sources and resp.sources[0].chunk_id == "c1"
+
+
+def test_pipeline_stt_retry_then_succeeds(monkeypatch):
+    flaky = FlakySTT("दिल्ली कहाँ है")
+    monkeypatch.setattr(
+        "app.harness.pipeline.get_settings",
+        lambda: _settings(max_retries=2, retry_base_delay_s=0.01),
+    )
+    p = _pipeline(stt=flaky)
+    resp = asyncio.run(p.process_audio("x.wav"))
+    assert flaky.calls == 2
+    assert resp.refused is False
+    assert "दिल्ली" in resp.answer
+
+
+def test_pipeline_stt_nonretryable_failure_refuses():
+    p = _pipeline(stt=FailingSTT())
+    resp = asyncio.run(p.process_audio("x.wav"))
+    assert resp.refused is True
+    assert "transcribe" in resp.refusal_reason
+
+
+def test_pipeline_retrieval_failure_refuses():
+    p = _pipeline()
+    p.retriever = FailingRetriever()
+    resp = p.query("दिल्ली कहाँ है")
+    assert resp.refused is True
+    assert "retrieval failed" in resp.refusal_reason
+
+
+def test_pipeline_generation_unexpected_error_falls_back():
+    rude = FakeLLMGenerator(exc=RuntimeError("boom"))
+    p = _pipeline(generator=rude, settings=_settings(max_retries=0))
+    resp = p.query("दिल्ली कहाँ है")
+    assert resp.refused is False
+    assert "दिल्ली" in resp.answer
+    assert p._generation_breaker._failures == 1
+
+
+def test_pipeline_breaker_open_skips_generation():
+    fake = FakeLLMGenerator(exc=RuntimeError("never reached"))
+    p = _pipeline(generator=fake, settings=_settings(circuit_breaker_threshold=2))
+    p._generation_breaker.record_failure()
+    p._generation_breaker.record_failure()
+    assert p._generation_breaker.is_open
+    resp = p.query("दिल्ली कहाँ है")
+    assert resp.refused is False
+    assert "दिल्ली" in resp.answer
+    assert fake.calls == 0
+
+
+def test_pipeline_generation_success_records_success():
+    good = FakeLLMGenerator(
+        answer=Answer(
+            text="दिल्ली दिल का शहर है",
+            cited_chunk_ids=["c1"],
+            grounded=True,
+            ttft_ms=5.0,
+        )
+    )
+    p = _pipeline(generator=good)
+    p._generation_breaker.record_failure()
+    resp = p.query("दिल्ली कहाँ है")
+    assert resp.refused is False
+    assert resp.answer == "दिल्ली दिल का शहर है"
+    assert p._generation_breaker._failures == 0
+
+
+def test_pipeline_uncited_answer_falls_back_to_extractive():
+    uncited = FakeLLMGenerator(
+        answer=Answer(text="बिना उद्धरण", cited_chunk_ids=[], grounded=True)
+    )
+    p = _pipeline(generator=uncited)
+    resp = p.query("दिल्ली कहाँ है")
+    assert resp.refused is False
+    assert resp.answer == "दिल्ली भारत की राजधानी है"

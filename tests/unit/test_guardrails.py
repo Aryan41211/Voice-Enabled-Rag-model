@@ -161,3 +161,52 @@ def test_output_grounded_answer_passes():
     result, ans = gr.check("q", chunks, Answer(text="दिल्ली", cited_chunk_ids=["c1"]))
     assert result.passed is True
     assert ans.grounded is True
+
+
+def test_input_embedding_offtopic_refuses():
+    gr = InputGuardrail(
+        embedder=FakeEmbedder(),
+        reference_queries=["प्रश्न एक", "प्रश्न दो"],
+        use_embedding_offtopic=True,
+        off_topic_threshold=0.5,
+    )
+    assert gr.check(_transcript("गलत सवाल")).action == "refuse"
+
+
+def test_input_embedding_offtopic_in_domain_proceeds():
+    gr = InputGuardrail(
+        embedder=FakeEmbedder(),
+        reference_queries=["प्रश्न एक", "प्रश्न दो"],
+        use_embedding_offtopic=True,
+        off_topic_threshold=0.5,
+    )
+    assert gr.check(_transcript("दिल्ली कहाँ है")).passed is True
+
+
+def test_input_embedding_offtopic_no_reference_allows():
+    gr = InputGuardrail(
+        embedder=FakeEmbedder(),
+        reference_queries=[],
+        use_embedding_offtopic=True,
+        off_topic_threshold=0.5,
+    )
+    assert gr.check(_transcript("गलत सवाल")).passed is True
+
+
+def test_output_too_long_refuses():
+    gr = OutputGuardrail(embedder=FakeEmbedder(), max_answer_chars=10)
+    result, _ = gr.check(
+        "q", [_chunk("c1", "t", 1.0)], Answer(text="x" * 50, cited_chunk_ids=["c1"])
+    )
+    assert result.action == "refuse"
+    assert "too long" in result.reason
+
+
+def test_output_groundedness_falls_back_to_all_chunks():
+    gr = OutputGuardrail(embedder=FakeEmbedder(), groundedness_threshold=0.0)
+    chunks = [_chunk("c1", "दिल्ली राजधानी है", 1.0)]
+    result, ans = gr.check(
+        "q", chunks, Answer(text="दिल्ली", cited_chunk_ids=["missing"])
+    )
+    assert result.passed is True
+    assert ans.grounded is True
