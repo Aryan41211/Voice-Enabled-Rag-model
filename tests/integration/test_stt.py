@@ -210,6 +210,52 @@ def test_ws_transcript_used_first(monkeypatch, tmp_path):
     assert result.text == "हैलो"
 
 
+class HangingWSResult:
+    async def send(self, message):
+        pass
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        await asyncio.Event().wait()
+
+
+def _patch_hanging_ws(monkeypatch):
+    import types
+
+    class HangingConn:
+        async def __aenter__(self):
+            return HangingWSResult()
+
+        async def __aexit__(self, *exc):
+            return False
+
+    fake_mod = types.SimpleNamespace(connect=lambda url, **kwargs: HangingConn())
+    monkeypatch.setattr(sttmod, "_get_websockets", lambda: fake_mod)
+
+
+def test_ws_timeout_falls_back_to_rest(monkeypatch, tmp_path):
+    # A WS that never answers must not eat the whole stt_timeout_s budget:
+    # transcribe() gives the realtime path half the budget, then falls back to
+    # REST (previously the asyncio.TimeoutError escaped and the whole voice
+    # request failed on long / slow audio).
+    p = tmp_path / "a.wav"
+    _make_wav(p)
+    _patch_hanging_ws(monkeypatch)
+
+    def handler(url, headers, data, files):
+        return FakeResponse(200, {"transcript": "लंबा ऑडियो ठीक रहा"})
+
+    orig = _rest_client(handler)
+    try:
+        stt = SarvamSTT(api_key="k", timeout_s=1.0)
+        result = asyncio.run(stt.transcribe(str(p)))
+        assert result.text == "लंबा ऑडियो ठीक रहा"
+    finally:
+        sttmod.httpx.AsyncClient = orig
+
+
 def test_ws_joins_multiple_finals(monkeypatch, tmp_path):
     # Server VAD splits multi-utterance audio (pause >1s) into several
     # transcript.final events. The client must keep all of them, not truncate

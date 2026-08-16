@@ -13,6 +13,7 @@ Auth header for both: ``api-subscription-key``.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -141,8 +142,20 @@ class SarvamSTT:
     async def transcribe(self, audio_path: str | Path) -> Transcript:
         if not self.api_key:
             raise STTError("Sarvam STT selected but no API key configured")
+        # The realtime WS is only worth its latency for short input; when the
+        # server cannot keep up (long / multi-turn audio) it would otherwise
+        # eat the entire stt_timeout_s budget and the pipeline would fail
+        # instead of degrading. Give it half the budget, then fall back to
+        # the synchronous REST endpoint which handles longer files.
+        ws_budget = max(1.0, self.timeout_s * 0.5)
         try:
-            return await self._transcribe_ws(audio_path)
+            return await asyncio.wait_for(self._transcribe_ws(audio_path), ws_budget)
+        except asyncio.TimeoutError:
+            logger.warning(
+                "Sarvam realtime exceeded %.1fs budget; falling back to REST",
+                ws_budget,
+            )
+            return await self._transcribe_rest(audio_path)
         except STTError as exc:
             if not exc.retryable:
                 raise

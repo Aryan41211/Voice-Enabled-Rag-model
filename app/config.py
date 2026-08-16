@@ -39,7 +39,10 @@ class Settings(BaseSettings):
 
     # STT
     sarvam_api_key: str = ""
-    stt_timeout_s: float = 10.0
+    # Total budget for one STT call. Half goes to the realtime WS attempt;
+    # the rest is reserved for the REST fallback, which is slower but handles
+    # longer files (up to 30 s) and multi-turn audio reliably.
+    stt_timeout_s: float = 20.0
     stt_provider: str = "sarvam"  # sarvam | fake (keyless local dev)
 
     # Index / pipeline serving
