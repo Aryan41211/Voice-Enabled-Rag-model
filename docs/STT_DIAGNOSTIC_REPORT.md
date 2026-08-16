@@ -66,3 +66,30 @@ wire-level logging. No implementation changes were made before this report.
 - **Secondary**: stale REST fallback URL (404); no audio-format validation
   before the API call; 10 s timeout kills long clips before fallback can run;
   no per-chunk/sequence/segment logging.
+
+## POST-FIX VERIFICATION (2026-08-17)
+
+All fixes committed to `main` and verified live against the real Sarvam API:
+
+| Fix | Commit | Verified |
+|---|---|---|
+| REST URL -> `https://api.sarvam.ai/speech-to-text` | `3f1c839` | 200 + exact transcripts; multi-utterance join |
+| WS collects ALL `transcript.final` (no first-final truncation) | `a8a7f74` | 2-utterance file returns both sentences |
+| Audio normalized to 16 kHz mono before the API call (numpy) | `3a5fa62` | 8 kHz, 16 kHz and 48 kHz-stereo WAVs all exact |
+| WS attempt capped at half the STT budget -> REST fallback on timeout | `6233b30` | hanging-WS test; `stt_timeout_s` 10->20 |
+| `/v1/voice` temp path sanitized (traversal + dead-code precedence) | `b2b3d5d` | upload with `../../evil.wav` stays in tmp dir |
+| Buffer spec / WS stream / REST status logging | `4ba8f8b` | buffer specs at INFO, transcripts DEBUG-only |
+| Frontend 16 kHz decode via OfflineAudioContext (+ linear downsample) | `38c931e` | server-side format validation covers mismatch (NOT browser-verified) |
+| Ground-truth fixtures + regression script | `b320812` | `scripts/stt_ground_truth.py`: 5/5 PASS live |
+
+Ground-truth after fixes (through `SarvamSTT().transcribe`, WS primary):
+
+| # | Result |
+|---|---|
+| 1 | भारत का राष्ट्रीय पक्षी कौन सा है? (exact) |
+| 2 | चंद्रयान तीन का प्रक्षेपण कब हुआ था? (exact) |
+| 3 | क्वांटम कंप्यूटिंग और आर्टिफिशियल इंटेलिजेंस में क्या संबंध है? (exact) |
+| 4 | जब भारत को आजादी मिली, तब देश का पहला प्रधानमंत्री कौन बना? (exact) |
+| 5 | मुझे भारत की नेशनल बर्ड के बारे में इंफॉर्मेशन चाहिए। (code-switched Devanagari) |
+
+Full test suite: 126 passed (was 116). `ruff check` and `ruff format --check` clean.
