@@ -25,6 +25,50 @@ def test_extractive_returns_top_passage():
     assert ans.ttft_ms >= 0
 
 
+def test_extractive_picks_query_relevant_sentence_not_top_chunk():
+    # A lower-scored chunk holds the sentence that answers the query; the
+    # top chunk is only loosely related. The extractor must prefer the
+    # sentence with query-token overlap over the top chunk verbatim.
+    gen = ExtractiveGenerator()
+    chunks = [
+        _hit(
+            "c1",
+            "भारत में अनेक राज्य हैं। हिमालय उत्तर में स्थित है।",
+            score=0.9,
+        ),
+        _hit(
+            "c2",
+            "मोर भारत का राष्ट्रीय पक्षी है। यह अपने नृत्य के लिए प्रसिद्ध है।",
+            score=0.7,
+        ),
+    ]
+    ans = gen.generate("भारत का राष्ट्रीय पक्षी कौन सा है", chunks)
+    assert "मोर" in ans.text
+    assert "राष्ट्रीय पक्षी" in ans.text
+    assert ans.cited_chunk_ids == ["c2"]
+
+
+def test_extractive_appends_context_when_sentence_is_short():
+    gen = ExtractiveGenerator()
+    chunks = [
+        _hit("c1", "पहला वाक्य कुछ और। मोर राष्ट्रीय पक्षी है। अगला संदर्भ वाक्य।", score=0.8),
+    ]
+    ans = gen.generate("राष्ट्रीय पक्षी", chunks)
+    assert "मोर" in ans.text
+    assert ans.cited_chunk_ids == ["c1"]
+
+
+def test_extractive_falls_back_to_top_chunk_when_no_overlap():
+    gen = ExtractiveGenerator()
+    chunks = [
+        _hit("c1", "पूरी तरह अलग विषय का पाठ। दूसरा वाक्य।", score=0.9),
+        _hit("c2", "कुछ नहीं", score=0.5),
+    ]
+    # No query token appears in any passage -> verbatim top-chunk opening.
+    ans = gen.generate("क्वांटम कंप्यूटिंग", chunks)
+    assert ans.cited_chunk_ids == ["c1"]
+
+
 def test_extractive_empty_chunks_raises():
     gen = ExtractiveGenerator()
     try:

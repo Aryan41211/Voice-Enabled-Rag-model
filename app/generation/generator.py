@@ -2,10 +2,12 @@
 
 Two providers behind one interface:
 
-* ``ExtractiveGenerator`` — offline default. Returns the highest-scoring
-  retrieved passage (truncated) verbatim. Zero API keys, zero network, fully
-  grounded by construction. This is what runs in the live demo when no LLM key
-  is configured.
+* ``ExtractiveGenerator`` — offline default. Returns the most
+  query-relevant **sentence** from the retrieved passages (token-overlap
+  scoring across the top chunks), keeping the answer crisp instead of
+  dumping a whole passage verbatim. Zero API keys, zero network, fully
+  grounded by construction. This is what runs in the live demo when no LLM
+  key is configured.
 * ``LLMGenerator`` — optional hosted LLM (OpenAI-compatible, e.g. Groq).
   Streams the response to measure time-to-first-token (TTFT) and is prompted
   to cite passages by index. Failures raise ``GenerationError``; the harness
@@ -40,6 +42,67 @@ CITED_RE = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]\s*$")
 
 DEFAULT_MAX_ANSWER_CHARS = 800
 
+# Query words that carry no retrieval signal for sentence matching. Kept small
+# and language-agnostic-ish (Devanagari + English function words).
+_QUERY_STOPWORDS = {
+    "का",
+    "की",
+    "के",
+    "को",
+    "से",
+    "में",
+    "पर",
+    "और",
+    "है",
+    "हैं",
+    "था",
+    "थी",
+    "क्या",
+    "कौन",
+    "सा",
+    "सी",
+    "से",
+    "कब",
+    "कहाँ",
+    "कहां",
+    "जब",
+    "तब",
+    "एक",
+    "यह",
+    "ये",
+    "वह",
+    "वे",
+    "किस",
+    "क्या",
+    "कैसे",
+    "why",
+    "what",
+    "who",
+    "when",
+    "where",
+    "how",
+    "which",
+    "the",
+    "a",
+    "an",
+    "is",
+    "are",
+    "was",
+}
+
+_SENTENCE_BREAK = re.compile(r"(?<=[।.!?])\s+|(?<=\n)\s*")
+
+
+def _split_sentences(text: str) -> list[str]:
+    """Split text into sentences, keeping the trailing punctuation attached."""
+    return [s.strip() for s in _SENTENCE_BREAK.split(text.strip()) if s.strip()]
+
+
+def _query_tokens(query: str) -> list[str]:
+    """Lowercased content tokens of the query (stopwords removed)."""
+    tokens = [t for t in re.split(r"[\W_]+", query.lower()) if t]
+    return [t for t in tokens if t not in _QUERY_STOPWORDS]
+
 
 def _truncate(text: str, max_chars: int = DEFAULT_MAX_ANSWER_CHARS) -> str:
     text = text.strip()
@@ -51,19 +114,74 @@ def _truncate(text: str, max_chars: int = DEFAULT_MAX_ANSWER_CHARS) -> str:
 class ExtractiveGenerator:
     name = "extractive"
 
-    def __init__(self, max_chars: int = DEFAULT_MAX_ANSWER_CHARS) -> None:
+    def __init__(
+        self,
+        max_chars: int = DEFAULT_MAX_ANSWER_CHARS,
+        max_context_chars: int = 140,
+    ) -> None:
         self.max_chars = max_chars
+        self.max_context_chars = max_context_chars
+
+    @staticmethod
+    def _best_sentence(query: str, chunks: list[RetrievedChunk]) -> tuple[str, str]:
+        """Return (answer_text, chunk_id) for the most query-relevant sentence.
+
+        Scores sentences across the top retrieved chunks by query-token
+        overlap, so the answer is a crisp sentence rather than a verbatim
+        passage dump. Falls back to the top chunk's opening when nothing
+        overlaps (still verbatim-grounded).
+        """
+        tokens = _query_tokens(query)
+        best_sentence = ""
+        best_chunk_id = ""
+        best_matches = -1
+        best_score = float("-inf")
+
+        for chunk in chunks:
+            for sentence in _split_sentences(chunk.text):
+                matches = sum(1 for t in tokens if t in sentence.lower())
+                if matches < best_matches:
+                    continue
+                # Prefer more matches; tie-break by chunk score.
+                if matches > best_matches or (
+                    matches == best_matches and chunk.score > best_score
+                ):
+                    best_matches = matches
+                    best_sentence = sentence
+                    best_chunk_id = chunk.chunk_id
+                    best_score = chunk.score
+
+        if not best_sentence or best_matches <= 0:
+            top = max(chunks, key=lambda c: c.score)
+            opening = _split_sentences(top.text)
+            return " ".join(opening[:2]), top.chunk_id
+        return best_sentence, best_chunk_id
 
     def generate(self, query: str, chunks: list[RetrievedChunk]) -> Answer:
         t0 = time.perf_counter()
         if not chunks:
             raise GenerationError("no retrieved chunks to extract from")
-        best = max(chunks, key=lambda c: c.score)
-        text = _truncate(best.text, self.max_chars)
+
+        sentence, chunk_id = self._best_sentence(query, chunks)
+
+        # Pull in the next sentence as context when the hit is short, keeping
+        # the answer tight (a fact alone reads better with a follow-on clause).
+        if len(sentence) < self.max_context_chars:
+            source = next((c for c in chunks if c.chunk_id == chunk_id), None)
+            sentences = _split_sentences(source.text) if source else []
+            for i, s in enumerate(sentences):
+                if s == sentence and i + 1 < len(sentences):
+                    following = sentences[i + 1]
+                    candidate = f"{sentence} {following}"
+                    if len(candidate) <= self.max_chars:
+                        sentence = candidate
+                    break
+
+        text = _truncate(sentence, self.max_chars)
         elapsed_ms = (time.perf_counter() - t0) * 1000
         return Answer(
             text=text,
-            cited_chunk_ids=[best.chunk_id],
+            cited_chunk_ids=[chunk_id],
             ttft_ms=elapsed_ms,
             full_generation_ms=elapsed_ms,
             grounded=True,
