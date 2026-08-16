@@ -3,6 +3,7 @@
 import asyncio
 import wave
 
+import numpy as np
 
 import app.stt.client as sttmod
 from app.harness.schemas import STTError
@@ -89,9 +90,9 @@ def _patch_ws(monkeypatch, messages=None, exc=None):
     monkeypatch.setattr(sttmod, "_get_websockets", lambda: fake_mod)
 
 
-def _make_wav(path, frames=b"\x00\x00" * 1600, rate=16000):
+def _make_wav(path, frames=b"\x00\x00" * 1600, rate=16000, channels=1):
     with wave.open(str(path), "wb") as w:
-        w.setnchannels(1)
+        w.setnchannels(channels)
         w.setsampwidth(2)
         w.setframerate(rate)
         w.writeframes(frames)
@@ -102,6 +103,51 @@ def test_to_pcm_converts_wav(tmp_path):
     _make_wav(p)
     pcm = _to_pcm(p)
     assert len(pcm) == 3200
+
+
+def test_to_pcm_keeps_16k_mono_untouched(tmp_path):
+    p = tmp_path / "a.wav"
+    frames = (np.arange(1600) % 256).astype("<i2").tobytes()
+    _make_wav(p, frames=frames)
+    assert _to_pcm(p) == frames
+
+
+def test_to_pcm_downmixes_stereo(tmp_path):
+    p = tmp_path / "s.wav"
+    lch = (np.arange(800) % 100).astype("<i2")
+    rch = (np.arange(800, 1600) % 100).astype("<i2")
+    interleaved = np.stack([lch, rch], axis=1).flatten().tobytes()
+    _make_wav(p, frames=interleaved, channels=2)
+    pcm = np.frombuffer(_to_pcm(p), dtype="<i2")
+    assert len(pcm) == 800
+    expected = ((lch.astype(np.float32) + rch.astype(np.float32)) / 2).astype("<i2")
+    assert np.array_equal(pcm, expected)
+
+
+def test_to_pcm_resamples_8khz_to_16khz(tmp_path):
+    p = tmp_path / "a.wav"
+    _make_wav(p, frames=b"\x00\x00" * 800, rate=8000)
+    assert len(_to_pcm(p)) == 3200  # 800 -> 1600 frames
+
+
+def test_to_pcm_resamples_44k1_to_16khz(tmp_path):
+    p = tmp_path / "a.wav"
+    _make_wav(p, frames=b"\x00\x00" * 4410, rate=44100)
+    assert len(_to_pcm(p)) == 3200  # 4410 -> 1600 frames
+
+
+def test_to_pcm_rejects_unsupported_width(tmp_path):
+    p = tmp_path / "a.wav"
+    with wave.open(str(p), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(1)
+        w.setframerate(16000)
+        w.writeframes(b"\x00" * 16)
+    try:
+        _to_pcm(p)
+        assert False, "should have raised"
+    except STTError:
+        pass
 
 
 def test_no_key_raises(monkeypatch):

@@ -15,14 +15,20 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import time
 import wave
 from pathlib import Path
 
 import httpx
+import numpy as np
 
 from app.config import get_settings
 from app.harness.schemas import STTError, Transcript
+
+logger = logging.getLogger(__name__)
+
+TARGET_SAMPLE_RATE = 16000
 
 DEFAULT_WS_URL = "wss://api.sarvam.ai/speech-to-text-realtime/ws"
 DEFAULT_REST_URL = "https://api.sarvam.ai/speech-to-text"
@@ -45,18 +51,67 @@ LANGUAGE_CODES = {
 AUDIO_CHUNK_BYTES = 2048
 
 
+def _normalize_pcm(raw: bytes, rate: int, channels: int) -> bytes:
+    """Normalize raw linear16 PCM to the 16 kHz mono format Sarvam expects.
+
+    Handles arbitrary sample rates and channel counts (downmix + resample via
+    numpy) so a mismatched client can never feed the API audio that is
+    mislabeled as 16 kHz mono.
+    """
+    if rate == TARGET_SAMPLE_RATE and channels == 1:
+        return raw
+    raw = raw[: len(raw) - (len(raw) % 2)]
+    samples = np.frombuffer(raw, dtype="<i2").astype(np.float32)
+    if channels > 1:
+        usable = len(samples) - (len(samples) % channels)
+        samples = samples[:usable].reshape(-1, channels).mean(axis=1)
+    if rate != TARGET_SAMPLE_RATE:
+        target_n = int(round(len(samples) * TARGET_SAMPLE_RATE / rate))
+        if target_n > 0:
+            x_old = np.linspace(0.0, 1.0, len(samples))
+            x_new = np.linspace(0.0, 1.0, target_n)
+            samples = np.interp(x_new, x_old, samples)
+    samples = np.clip(samples, -32768.0, 32767.0)
+    return samples.astype("<i2").tobytes()
+
+
 def _to_pcm(audio_path: str | Path) -> bytes:
-    """Return raw linear16 PCM bytes from a WAV file or raw PCM file."""
+    """Return raw linear16 PCM bytes, normalized to 16 kHz mono.
+
+    WAV files are read through the ``wave`` module so their real header (sample
+    rate / channels / bit depth) is honored — never assumed. Anything other
+    than 16 kHz mono 16-bit PCM is converted rather than silently mislabeled.
+    A non-WAV file is treated as raw linear16 PCM (assumed 16 kHz mono).
+    """
     path = Path(audio_path)
+    rate = TARGET_SAMPLE_RATE
+    channels = 1
+    source = "raw PCM (assumed 16 kHz mono)"
     try:
         with wave.open(str(path), "rb") as wav:
             if wav.getsampwidth() != 2:
                 raise STTError(
                     f"unsupported sample width {wav.getsampwidth()} (need 16-bit)"
                 )
-            return wav.readframes(wav.getnframes())
+            rate = wav.getframerate()
+            channels = wav.getnchannels()
+            source = (
+                f"WAV {rate} Hz / {channels} ch / 16-bit "
+                f"({wav.getnframes() / rate:.2f}s)"
+            )
+            raw = wav.readframes(wav.getnframes())
     except wave.Error:
-        return path.read_bytes()
+        raw = path.read_bytes()
+
+    pcm = _normalize_pcm(raw, rate, channels)
+    logger.debug(
+        "stt audio buffer: source=%s -> %d Hz mono 16-bit, %d bytes, %.2fs",
+        source,
+        TARGET_SAMPLE_RATE,
+        len(pcm),
+        len(pcm) / (TARGET_SAMPLE_RATE * 2),
+    )
+    return pcm
 
 
 def _get_websockets():
