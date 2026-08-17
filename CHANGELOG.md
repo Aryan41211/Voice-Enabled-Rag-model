@@ -4,7 +4,13 @@ All notable changes to this project during the HH Goa 2026 sprint. Format loosel
 
 ## [Unreleased]
 ### Added
-- Initial project documentation set (README, ARCHITECTURE, CHUNKING_STRATEGY, GUARDRAILS, LATENCY_BENCHMARK, EVALUATION, API, TESTING, DEPLOYMENT, ROADMAP, SUBMISSION_CHECKLIST, CONTRIBUTING)
+- Upgraded embedding model from `multilingual-e5-small` (384-dim) to `multilingual-e5-base` (768-dim) — dense-only R@5 improved from 0.709 to 0.737
+- Enabled `BAAI/bge-reranker-v2-m3` cross-encoder reranking with 10 candidates as live pipeline default — R@5 improved to 0.855, P70 latency = 211 ms (under 250 ms budget)
+- Added `rerank_enabled`, `rerank_candidates`, `rerank_model` config settings
+- Added `_RerankedDense` pipeline wrapper that preserves dense scores for guardrail compatibility
+- Reranker ablation results across 5/8/10/15/20 candidate counts in EVALUATION.md
+- Rebuilt metadata index with e5-base embeddings (backup of e5-small index preserved at `data/index/hi/metadata_e5small_backup`)
+- Diagnostic and evaluation scripts: `benchmarks/diag_retrieval.py`, `benchmarks/pipeline_r5.py`, `benchmarks/rerank_ablation.py`
 - Shared pipeline schemas (`app/harness/schemas.py`) per API.md
 - 5 chunking strategies (`app/ingestion/chunking.py`): fixed+overlap, semantic, sentence-window, metadata-aware, hierarchical
 - FAISS + BM25 index builder (`app/ingestion/build_index.py`) per strategy
