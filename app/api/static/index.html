@@ -65,8 +65,10 @@
     <div id="transcript"></div>
     <div class="label">उत्तर</div>
     <div id="answer" class="answer"></div>
-    <div class="label">स्रोत (retrieved passages)</div>
-    <div id="sources"></div>
+    <details id="srcDetails" open>
+      <summary class="label" style="cursor:pointer">स्रोत (retrieved passages)</summary>
+      <div id="sources"></div>
+    </details>
     <div class="meta" id="meta"></div>
   </div>
 
@@ -173,7 +175,18 @@ recBtn.addEventListener("click", async () => {
     recBtn.textContent = "⏹ रोकें";
     recBtn.classList.add("rec");
     setStatus("सुन रहा हूँ…", true);
-  } catch (e) { errEl.textContent = "माइक नहीं मिला: " + e.message; }
+  } catch (e) {
+    const hint = e.name === "NotAllowedError"
+      ? " — कृपया ब्राउज़र में माइक अनुमति दें"
+      : e.name === "NotFoundError"
+      ? " — माइक्रोफ़ोन डिटेक्ट नहीं हुआ"
+      : "";
+    errEl.textContent = "माइक नहीं मिला: " + e.message + hint;
+  }
+});
+
+input.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.isComposing) askBtn.click();
 });
 
 askBtn.addEventListener("click", async () => {
@@ -198,9 +211,10 @@ function showResult(r) {
   (r.sources || []).forEach((s) => {
     const d = document.createElement("div");
     d.className = "src";
-    d.innerHTML = "<b>[" + s.chunk_id.slice(-6) + "]</b> " + s.passage.slice(0, 220);
+    d.innerHTML = "<b>[" + s.chunk_id.slice(-6) + "]</b> " + s.passage.slice(0, 160);
     srcs.appendChild(d);
   });
+  $("srcDetails").open = !r.refused;
   const t = r.timings_ms || {};
   $("meta").textContent = "total " + (t.total_ms !== undefined ? t.total_ms.toFixed(1) + " ms" : "—")
     + " · retrieval " + (t.retrieval_ms !== undefined ? t.retrieval_ms.toFixed(1) + " ms" : "—")

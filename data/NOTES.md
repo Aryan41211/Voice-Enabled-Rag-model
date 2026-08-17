@@ -1,58 +1,54 @@
-# Data Notes — MSMARCO-XI
+# Data Notes
 
-Single source of truth for all project data. **No other datasets are used.**
+## Current Index
 
-## Source
+| Field | Value |
+|-------|-------|
+| Lang | `hi` (Hindi) |
+| Strategy | `metadata` (passage-level metadata indexing) |
+| Chunks | 15,008 |
+| Queries | 1,500 |
+| Embedding model | `intfloat/multilingual-e5-small` |
+| Dense index | `IndexFlatIP` (FAISS inner-product) |
+| Sparse index | `BM25Okapi` (rank_bm25) |
+| Split | `validation` (MSMARCO-XI `hi`) |
+| File | `data/raw/validation/hinval.parquet` (462 MB cached) |
 
-- `ai4bharat/MSMARCO-XI` (HuggingFace) — multilingual MS MARCO translation.
-- Repo layout: per-language parquet per split: `train/{prefix}train.parquet`,
-  `validation/{prefix}val.parquet`.
-- Auto-converted Hub config only exposes `default` (all languages, ~55.6 GB);
-  per-language configs from the original loading script are **not** available.
-  We therefore load the raw per-language parquet files directly (see
-  `app/ingestion/dataset.py`), which lets us cache only the languages we use.
+## Latency Benchmarks (2026-08-17)
 
-## Cached (local, `data/raw/`)
+Measured via `scripts/e2e_voice.py` on 3 eval_gold queries:
+- **Retrieval P50**: ~34 ms (hybrid dense+sparse)
+- **Generation**: <1 ms (sentence-level extractive, pure Python)
+- **STT (WS path)**: ~2-3 s (Sarvam realtime via sarvam.ws)
+- **End-to-end total**: ~3-3.5 s (dominated by STT)
+- Pipeline loads in ~13 s (first call: SentenceTransformer cold load + FAISS mmap)
 
-| lang | split | file | rows |
-|------|-------|------|------|
-| hi   | validation | `validation/hinval.parquet` | 97,941 |
+## Corpus Expansion (not done — too large for in-session work)
 
-To add more: `python -m app.ingestion -l <lang> download --split train validation`
+The train split (`hintrain.parquet`) is not cached and is very large (MSMARCO-XI
+Hindi train is hundreds of MB of parquet, with millions of passages). Steps to
+expand the index offline:
 
-## Schema (per example)
+1. **Download train split**: `python -c "from datasets import load_dataset; ds=load_dataset('parquet',data_files='data/raw/validation/hinval.parquet',split='train'); ds.to_parquet('data/raw/train/hintrain.parquet')"` — or download from HuggingFace `kharvid/msmarco-xi-hi` directly.
 
-| field | type | notes |
-|-------|------|-------|
-| `query_id` | int | unique query id |
-| `query` | str | translated (Hindi) query |
-| `Eng_Query` | str | original English query |
-| `Answer` | str | translated gold answer |
-| `Eng_Answer` | str | original English answer |
-| `query_type` | str | DESCRIPTION / ENTITY / NUMERIC / LOCATION / PERSON |
-| `source_lang` | str | `eng_Latn` |
-| `target_lang` | str | e.g. `hin_Deva` |
-| `meta` | dict | translation model sampling metadata |
-| `passages.Translated_passages` | list[str] | candidate passages (translated) |
-| `passages.English_passages` | list[str] | same passages (English) |
-| `passages.is_selected` | list[int] | 1 = passage answers the query (gold label) |
+2. **Ingest**: `python -m app.ingestion.loader --corpus data/raw/train/hintrain.parquet --lang hi --strategy metadata`
 
-## Observed stats (hi/validation, 97,941 rows)
+3. **Embed**: `python -m app.ingestion.embed --corpus data/index/hi`
 
-- Passages per query: mean 10.0 (min 1, max 27) — corpus ≈ 1.0M passages.
-- Selected passages per query: mean 0.59; **53,895 rows (55%) have ≥1 selected
-  passage** → usable as the gold-labeled retrieval eval set.
-- Translated passage length: mean 324 chars, median 292 — short, self-contained
-  snippets → chunking should *combine* passages, not aggressively split
-  (see CHUNKING_STRATEGY.md).
-- Query length: mean 43 chars.
-- `query_type` distribution: DESCRIPTION 52,912 · NUMERIC 24,741 · ENTITY
-  8,427 · PERSON 6,206 · LOCATION 5,655.
+4. **Rebuild sparse index**: Built automatically by the embed step.
 
-## Usage constraints
+**Warning**: CPU embedding of millions of passages (multilingual-e5-small) will take
+hours. Consider using a GPU runner or pre-computed embeddings if available.
 
-- Retrieval corpus = `passages.Translated_passages` (indexed once, offline).
-- Eval = `query` → retrieve → must return the `is_selected == 1` passage.
-- Answer grounding target = `Answer` / selected passage text.
-- Only rows with ≥1 selected passage are used for accuracy eval; all rows can
-  be used for latency benchmarking.
+## Sarvam Batch API Notes
+
+Verified live (2026-08-17). Useful for audio >30 s (sync endpoints cap at 30 s):
+
+- Init: `POST /speech-to-text/job/v1` (JSON `job_parameters`) -> 202, `job_id`
+- Upload: `POST /speech-to-text/job/v1/upload-files` -> presigned blob URL
+- Start: `POST /speech-to-text/job/v1/{job_id}/start`
+- Poll: `GET /speech-to-text/job/v1/{job_id}/status` -> `Completed`/`Failed`
+- Download: `POST /speech-to-text/job/v1/download-files` -> `GET` each URL -> JSON `{transcript: ...}`
+- Latency: ~5-8 s for a 48 s WAV (including polling overhead)
+
+OpenAPI spec saved locally: `C:\Users\aryan\AppData\Local\Temp\opencode\sarvam_job_api.yml`

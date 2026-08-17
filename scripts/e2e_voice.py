@@ -23,7 +23,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-GOLD = Path(__file__).resolve().parent.parent / "data" / "index" / "hi" / "eval_gold.jsonl"
+GOLD = (
+    Path(__file__).resolve().parent.parent / "data" / "index" / "hi" / "eval_gold.jsonl"
+)
 
 
 async def _synthesize_wav(text: str) -> Path:
@@ -54,15 +56,14 @@ async def _synthesize_wav(text: str) -> Path:
 
 async def run_one(query: str, idx: int, pipe, stt) -> dict:
     """Full voice round-trip on a single query; returns a timing dict."""
+    from app.harness.schemas import Transcript
+
     wav = await _synthesize_wav(query)
     try:
         t0 = time.perf_counter()
         transcript = await stt.transcribe(str(wav))
         t_stt = (time.perf_counter() - t0) * 1000
 
-        from app.harness.schemas import Transcript
-
-        t1 = time.perf_counter()
         resp = await pipe.query_async(Transcript(text=transcript.text))
         t_total = (time.perf_counter() - t0) * 1000
 
@@ -102,19 +103,23 @@ async def main(count: int = 10) -> None:
         r = await run_one(q, i, pipe, stt)
         results.append(r)
         tag = "REFUSED" if r["refused"] else "OK"
-        print(f"  [{tag}] stt={r['stt_ms']:.0f}ms "
-              f"retr={r['retrieval_ms']:.1f}ms "
-              f"gen={r['generation_ms']:.1f}ms "
-              f"total={r['total_ms']:.0f}ms "
-              f"src={r['sources']}")
+        print(
+            f"  [{tag}] stt={r['stt_ms']:.0f}ms "
+            f"retr={r['retrieval_ms']:.1f}ms "
+            f"gen={r['generation_ms']:.1f}ms "
+            f"total={r['total_ms']:.0f}ms "
+            f"src={r['sources']}"
+        )
         print(f"  A: {r['answer']}\n")
 
     refused = sum(1 for r in results if r["refused"])
     if results:
         t_med = sorted(r["total_ms"] for r in results)[len(results) // 2]
         t_retr_med = sorted(r["retrieval_ms"] for r in results)[len(results) // 2]
-        print(f"summary: {len(results)} queries, {refused} refused, "
-              f"median total={t_med:.0f}ms  median retrieval={t_retr_med:.1f}ms")
+        print(
+            f"summary: {len(results)} queries, {refused} refused, "
+            f"median total={t_med:.0f}ms  median retrieval={t_retr_med:.1f}ms"
+        )
     else:
         print("summary: no queries")
 
