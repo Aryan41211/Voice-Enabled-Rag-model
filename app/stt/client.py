@@ -49,7 +49,7 @@ LANGUAGE_CODES = {
     "ne": "ne-IN",
     "sa": "sa-IN",
 }
-AUDIO_CHUNK_BYTES = 2048
+AUDIO_CHUNK_BYTES = 3200  # ~100ms at 16kHz mono 16-bit (Sarvam recommended)
 
 # Sarvam's synchronous REST/WS endpoints reject audio longer than 30 s. Longer
 # recordings go through the async batch job API instead (verified live).
