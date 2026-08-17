@@ -156,9 +156,27 @@ recBtn.addEventListener("click", async () => {
   if (recorder) { recorder.stop(); return; }
   errEl.textContent = "";
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
     chunks = [];
     recorder = new MediaRecorder(stream);
+    const audioTrack = stream.getAudioTracks()[0];
+    if (audioTrack) {
+      const settings = audioTrack.getSettings();
+      console.log("[stt] mic capture:", JSON.stringify({
+        sampleRate: settings.sampleRate,
+        channelCount: settings.channelCount,
+        echoCancellation: settings.echoCancellation,
+        noiseSuppression: settings.noiseSuppression,
+        autoGainControl: settings.autoGainControl,
+        mimeType: recorder.mimeType,
+      }));
+    }
     recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
     recorder.onstop = async () => {
       stream.getTracks().forEach((t) => t.stop());
@@ -167,7 +185,10 @@ recBtn.addEventListener("click", async () => {
       if (!chunks.length) { setStatus("कुछ नहीं मिला"); return; }
       setStatus("प्रोसेस हो रहा है…", true);
       try {
-        const wav = await webmToWav(new Blob(chunks, { type: "audio/webm" }));
+        const webmBlob = new Blob(chunks, { type: "audio/webm" });
+        console.log("[stt] raw capture:", webmBlob.size, "bytes", recorder.mimeType);
+        const wav = await webmToWav(webmBlob);
+        console.log("[stt] converted WAV:", wav.size, "bytes, 16kHz mono s16le");
         await showResult(await postVoice(wav));
       } catch (e) { errEl.textContent = "त्रुटि: " + e.message; setStatus("त्रुटि"); }
     };
