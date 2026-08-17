@@ -14,6 +14,7 @@ stage; configure ``LLM_PROVIDER``/keys to enable a hosted LLM.
 from __future__ import annotations
 
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -21,10 +22,12 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import get_settings
 from app.harness.pipeline import Pipeline
 from app.harness.schemas import Transcript
+from app.logging_config import request_context, setup_logging
 from app.stt.client import FakeSTT, SarvamSTT
 
 logger = logging.getLogger("voice-rag")
@@ -69,6 +72,15 @@ class Server:
 state = Server()
 
 
+class RequestTracingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        rid = uuid.uuid4().hex[:12]
+        with request_context(request_id=rid):
+            response = await call_next(request)
+            response.headers["X-Request-ID"] = rid
+        return response
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     try:
@@ -87,6 +99,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(RequestTracingMiddleware)
+    setup_logging(level="INFO", json_output=True)
 
     @app.get("/", include_in_schema=False)
     async def index() -> FileResponse:
