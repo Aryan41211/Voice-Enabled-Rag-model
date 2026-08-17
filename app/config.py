@@ -23,10 +23,15 @@ class Settings(BaseSettings):
     data_split: str = "validation"
 
     # Embedding / retrieval
-    embedding_model: str = "intfloat/multilingual-e5-small"
+    embedding_model: str = "intfloat/multilingual-e5-base"
     device: str = "auto"  # auto | cpu | cuda
     index_dir: str = "./data/index"
     embedding_batch_size: int = 64
+
+    # Cross-encoder reranking
+    rerank_enabled: bool = True
+    rerank_candidates: int = 10
+    rerank_model: str = "BAAI/bge-reranker-v2-m3"
 
     # Generation
     llm_provider: str = "extractive"  # extractive | groq
