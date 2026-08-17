@@ -25,6 +25,7 @@ import httpx
 import numpy as np
 
 from app.config import get_settings
+from app.stt.audio_processing import preprocess_audio
 from app.harness.schemas import STTError, Transcript
 
 logger = logging.getLogger(__name__)
@@ -208,6 +209,7 @@ class SarvamSTT:
         websockets = _get_websockets()
 
         pcm = _to_pcm(audio_path)
+        pcm = preprocess_audio(pcm, sample_rate=TARGET_SAMPLE_RATE)
 
         # Quick sanity check: warn if audio is silent or very quiet.
         samples = np.frombuffer(pcm, dtype="<i2")
