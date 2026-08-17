@@ -252,6 +252,8 @@ class SarvamSTT:
                 )
 
                 final_parts: list[str] = []
+                n_partials = 0
+                t_session = time.perf_counter()
                 async for message in ws:
                     try:
                         data = json.loads(message)
@@ -259,8 +261,27 @@ class SarvamSTT:
                         logger.debug("stt ws: non-JSON message ignored")
                         continue
                     event = data.get("event")
-                    logger.debug("stt ws: event=%s", event)
-                    if event == "transcript.final":
+                    elapsed_ms = (time.perf_counter() - t_session) * 1000
+                    if event == "vad.speech_start":
+                        conf = data.get("confidence", "?")
+                        logger.info(
+                            "stt ws: VAD speech_start at %.0fms (confidence=%s)",
+                            elapsed_ms,
+                            conf,
+                        )
+                    elif event == "vad.speech_end":
+                        conf = data.get("confidence", "?")
+                        logger.info(
+                            "stt ws: VAD speech_end at %.0fms (confidence=%s)",
+                            elapsed_ms,
+                            conf,
+                        )
+                    elif event == "transcript.partial":
+                        n_partials += 1
+                        logger.debug(
+                            "stt ws: partial[%d]=%r", n_partials, data.get("text", "")
+                        )
+                    elif event == "transcript.final":
                         text = (data.get("text") or "").strip()
                         if text:
                             final_parts.append(text)
@@ -278,10 +299,13 @@ class SarvamSTT:
                 # multi-utterance input (natural pauses) is not truncated to the
                 # first sentence.
                 final_text = " ".join(final_parts).strip()
-                logger.debug(
-                    "stt ws: session ended, %d final(s) -> %r",
+                total_ws_ms = (time.perf_counter() - t_session) * 1000
+                logger.info(
+                    "stt ws: session ended in %.0fms, %d partial(s), %d final(s) -> %r",
+                    total_ws_ms,
+                    n_partials,
                     len(final_parts),
-                    final_text,
+                    final_text[:80],
                 )
         except STTError:
             raise
