@@ -14,13 +14,15 @@ stage; configure ``LLM_PROVIDER``/keys to enable a hosted LLM.
 from __future__ import annotations
 
 import logging
+import time
 import uuid
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -83,6 +85,49 @@ class Server:
 state = Server()
 
 
+_RATE_LIMIT_EXEMPT_PATHS = {"/health", "/"}
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Per-IP sliding-window rate limiter. Returns 429 + Retry-After when exceeded."""
+
+    def __init__(self, app, max_requests: int = 30, window_s: float = 60.0) -> None:
+        super().__init__(app)
+        self.max_requests = max_requests
+        self.window_s = window_s
+        self._hits: dict[str, list[float]] = defaultdict(list)
+
+    def _client_ip(self, request: Request) -> str:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        return request.client.host if request.client else "unknown"
+
+    async def dispatch(self, request, call_next):
+        path = request.url.path
+        if path in _RATE_LIMIT_EXEMPT_PATHS:
+            return await call_next(request)
+
+        ip = self._client_ip(request)
+        now = time.monotonic()
+        window_start = now - self.window_s
+
+        timestamps = self._hits[ip]
+        self._hits[ip] = [t for t in timestamps if t > window_start]
+
+        if len(self._hits[ip]) >= self.max_requests:
+            oldest = self._hits[ip][0]
+            retry_after = int(self.window_s - (now - oldest)) + 1
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "rate limit exceeded"},
+                headers={"Retry-After": str(retry_after)},
+            )
+
+        self._hits[ip].append(now)
+        return await call_next(request)
+
+
 class RequestTracingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         rid = uuid.uuid4().hex[:12]
@@ -116,6 +161,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.add_middleware(RequestTracingMiddleware)
+    app.add_middleware(RateLimitMiddleware)
     setup_logging(level="INFO", json_output=True)
 
     @app.get("/", include_in_schema=False)

@@ -335,3 +335,23 @@ def test_pipeline_session_turns_recorded(tmp_path):
     p.query("वहाँ क्या है", session_id="s1")
     session = session_store.get_or_create("s1")
     assert session.turn_count >= 2
+
+
+def test_pipeline_records_log_entry(tmp_path):
+    """Task 4.1: run a mock query and verify log store has the entry."""
+    from app.observability.store import LogStore
+
+    store = LogStore(tmp_path / "log_entry.db")
+    p = _pipeline(stt=FakeSTT({"audio_hi": "दिल्ली कहाँ है"}))
+    p._log_store = store
+    resp = p.query("दिल्ली कहाँ है", request_id="logentry_1")
+    assert resp.refused is False
+    entries = store.query()
+    assert len(entries) == 1
+    e = entries[0]
+    assert e.request_id == "logentry_1"
+    assert e.transcript == "दिल्ली कहाँ है"
+    assert e.language == "hi"
+    assert e.refused is False
+    assert e.total_latency_ms > 0
+    store.close()
