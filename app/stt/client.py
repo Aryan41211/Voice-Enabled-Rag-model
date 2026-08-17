@@ -208,6 +208,24 @@ class SarvamSTT:
         websockets = _get_websockets()
 
         pcm = _to_pcm(audio_path)
+
+        # Quick sanity check: warn if audio is silent or very quiet.
+        samples = np.frombuffer(pcm, dtype="<i2")
+        rms = float(np.sqrt(np.mean(samples.astype(np.float64) ** 2)))
+        duration_s = len(samples) / TARGET_SAMPLE_RATE
+        if rms < 100:
+            logger.warning(
+                "stt ws: very quiet audio (RMS=%.1f, %.1fs) — VAD may miss speech",
+                rms,
+                duration_s,
+            )
+        elif rms > 20000:
+            logger.warning(
+                "stt ws: very loud audio (RMS=%.1f, %.1fs) — may clip",
+                rms,
+                duration_s,
+            )
+
         params = {
             "language_code": self.language_code,
             "model": "saaras:v3-realtime",
