@@ -216,6 +216,10 @@ class SarvamSTT:
             "endpointing": "vad",
             "encoding": "linear16",
             "sample_rate": 16000,
+            "high_vad_sensitivity": "true",
+            "threshold": 0.2,
+            "min_speech_duration_ms": 150,
+            "silence_duration_ms": 400,
         }
         query = "&".join(f"{k}={v}" for k, v in params.items())
         url = f"{self.ws_url}?{query}"
