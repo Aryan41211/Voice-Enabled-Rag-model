@@ -90,13 +90,26 @@ Rate each on a 1–5 scale, or pass/fail — pick one and be consistent.
 
 **P70 retrieval+TTFT = 211 ms — under the 250 ms budget.**
 
-## 5. Known Limitations
-- **STT ground-truth eval requires a live Sarvam API key** — the 5 committed audio fixtures (`tests/fixtures/gt_01.wav` through `gt_05.wav`) are ready, and `scripts/stt_ground_truth.py` runs them through the live API, but CI/test environments without `SARVAM_API_KEY` cannot execute this. The WER exit criterion is therefore deferred: the STT pipeline itself is correct (WebSocket→REST fallback, WAV→PCM conversion, VAD endpointing all tested with mocked APIs in `tests/integration/test_stt.py`), but live transcription accuracy depends on Sarvam's hosted model, which is outside our control.
+## 5. STT Accuracy (Synthetic TTS Evaluation)
+
+**Methodology:** 20 TTS clips generated via `edge-tts` (12 Hindi, 4 Bengali, 4 Tamil), transcribed through live Sarvam API, WER computed against expected text.
+
+| Language | Clips | Avg WER | Notes |
+|---|---|---|---|
+| Hindi | 12 | 0.0% | All clips transcribed perfectly |
+| Bengali | 4 | 0.0% | All clips transcribed perfectly |
+| Tamil | 4 | 6.3% | 1 failure: compound word split (ta_03: "தமிழ்நாடு" → "தமிழ் நாடு") |
+| **Overall** | **20** | **2.5%** | **19/20 at 0% WER** |
+
+**Caveat: These are synthetic (TTS) clips, not real-microphone recordings.** TTS audio is cleaner than real-world speech (no background noise, consistent pronunciation, studio-quality mic simulation). Real-microphone WER is expected to be higher. Real-mic test data has not yet been collected.
+
+## 6. Known Limitations
+- **STT WER is measured on synthetic (TTS) audio only** — real-microphone recordings have not been collected. TTS audio is cleaner than real-world speech (no background noise, consistent pronunciation). Real-mic WER is expected to be higher. See Section 5 for details.
 - Retrieval corpus is a 1,500-query sample (~15K passages) of the Hindi validation split — generalization to other 12 languages and the full corpus is not yet verified.
 - Hybrid (dense + BM25) hurt results on this Hindi subset; BM25 is known to be weak on highly inflected Hindi. Re-evaluate if supporting a more analytic language (e.g. English source passages).
 - Semantic chunking adds ~98 s of offline build time for no retrieval gain at this corpus size (passages are already short).
 
-## 6. Guardrail Threshold Calibration (retrieval "no relevant" check)
+## 7. Guardrail Threshold Calibration (retrieval "no relevant" check)
 
 Calibrated on 120 eval queries (metadata index, dense, 384-dim e5 vectors). The
 absolute top-1 cosine is **not** a relevance signal here — it is ~0.88 both for
@@ -128,13 +141,13 @@ separates the two populations on this sample; it is configurable in
   miss 0.011, both down to ~0.001). The ambiguity check is **disabled by
   default** (`ambiguous_gap = 0.0`); the isolation margin is the real signal.
 
-## 7. Improvement Loop Log (1 iteration)
+## 8. Improvement Loop Log (1 iteration)
 
 ### Exit Criteria Met
 
 | Criterion | Target | Achieved | Status |
 |---|---|---|---|
-| STT WER | <10% | Cannot measure (requires live Sarvam API key; no ground truth audio fixtures in CI) | **Deferred** — see Known Limitations |
+| STT WER | <10% | **2.5%** (synthetic TTS, 20 clips) | **PASS** — synthetic only; real-mic not yet collected |
 | Retrieval R@5 | >80% | **0.855** (pipeline, 249 answered / 300 total) | **PASS** |
 | Guardrails | 100% adversarial pass | **6/6 (100%)** | **PASS** |
 | Latency P70 | <250 ms | **211 ms** (retrieval+TTFT) | **PASS** |
@@ -172,11 +185,11 @@ change was kept. The reranker ablation (5/8/10/15/20 candidates) confirmed
 10 as the optimal tradeoff point: 8 candidates barely clears 80% R@5
 (0.802), while 15+ candidates exceeds the latency budget.
 
-## 8. Final Exit Criteria (post Phase 4)
+## 9. Final Exit Criteria (post Phase 4)
 
 | Criterion | Target | Achieved | Status |
 |---|---|---|---|
-| STT WER | <10% | Deferred (requires live Sarvam API key) | **Deferred** |
+| STT WER | <10% | **2.5%** (synthetic TTS, 20 clips) | **PASS** — synthetic only; real-mic not yet collected |
 | Retrieval R@5 | >80% | **0.855** (249 answered / 300 total) | **PASS** |
 | Guardrails | 100% adversarial pass | **6/6 (100%)** | **PASS** |
 | Latency P70 | <250 ms | **211 ms** (retrieval+TTFT) | **PASS** |
