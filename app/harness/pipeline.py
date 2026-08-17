@@ -182,6 +182,16 @@ class Pipeline:
         timings = timings or {}
         sources: list[Source] = []
 
+        # --- Pre-guardrail: STT confidence check ------------------------
+        if transcript.confidence < self.settings.stt_min_confidence:
+            return QueryResponse(
+                request_id=request_id,
+                transcript=transcript.text,
+                refused=True,
+                refusal_reason=f"low_stt_confidence:{transcript.confidence:.2f}",
+                timings_ms=timings,
+            )
+
         # --- Layer 1: input guardrail -----------------------------------
         t1 = time.perf_counter()
         gr = self.guardrails.check_input(transcript)

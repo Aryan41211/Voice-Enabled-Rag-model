@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     # longer files (up to 30 s) and multi-turn audio reliably.
     stt_timeout_s: float = 20.0
     stt_provider: str = "sarvam"  # sarvam | fake (keyless local dev)
+    stt_min_confidence: float = 0.4
 
     # Index / pipeline serving
     data_strategy: str = "metadata"
