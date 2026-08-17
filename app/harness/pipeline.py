@@ -42,6 +42,26 @@ GENERATION_CHUNKS = 5
 logger = logging.getLogger("voice-rag")
 
 
+class _RerankedDense:
+    """Wraps a dense retriever with cross-encoder reranking.
+
+    Preserves the original dense score on each chunk so retrieval guardrails
+    (which compare against background_score) remain valid.
+    """
+
+    def __init__(self, dense_retriever, reranker, top_n: int = 10) -> None:
+        self._dense = dense_retriever
+        self._reranker = reranker
+        self._top_n = top_n
+
+    def search(self, query_vector, k: int = 20, query_text: str = "") -> list:
+        candidates = self._dense.search(query_vector, k=k, query_text=query_text)
+        if not candidates or not query_text:
+            return candidates
+        reranked = self._reranker.rerank(query_text, candidates, top_n=self._top_n)
+        return reranked
+
+
 class CircuitBreaker:
     """Trips after ``threshold`` consecutive failures; stays open for ``reset_s``."""
 
@@ -104,13 +124,22 @@ class Pipeline:
     ) -> "Pipeline":
         from app.retrieval.load import load_chunks, load_dense
 
+        settings = get_settings()
         chunks = load_chunks(lang, strategy, index_dir)
         dense = load_dense(lang, strategy, chunks, index_dir)
+        retriever = dense
+        if settings.rerank_enabled:
+            from app.retrieval.rerank import CrossEncoderReranker
+
+            reranker = CrossEncoderReranker(model_name=settings.rerank_model)
+            retriever = _RerankedDense(
+                dense, reranker, top_n=settings.rerank_candidates
+            )
         embedder = Embedder()
         guardrails = GuardrailPipeline()
         return cls(
             embedder=embedder,
-            retriever=dense,
+            retriever=retriever,
             guardrails=guardrails,
             generator=make_generator(),
         )
