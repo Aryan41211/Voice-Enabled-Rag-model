@@ -210,3 +210,14 @@ def test_output_groundedness_falls_back_to_all_chunks():
     )
     assert result.passed is True
     assert ans.grounded is True
+
+
+def test_input_short_in_context_proceeds(tmp_path):
+    """Short follow-up proceeds when conversation context has prior turns."""
+    gr = InputGuardrail(embedder=FakeEmbedder(), index_dir=tmp_path)
+    context = [
+        {"role": "user", "text": "दिल्ली के बारे में बताओ"},
+        {"role": "assistant", "text": "दिल्ली भारत की राजधानी है।"},
+    ]
+    result = gr.check(_transcript("यह कैसे काम करता है"), conversation_context=context)
+    assert result.action == "proceed"

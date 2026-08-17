@@ -34,6 +34,7 @@ from app.harness.schemas import (
     Transcript,
 )
 from app.ingestion.embed import Embedder
+from app.session.rewriter import rewrite_query
 
 BACKGROUND_RANK = 20
 GENERATION_CHUNKS = 5
@@ -193,8 +194,18 @@ class Pipeline:
             )
 
         # --- Layer 1: input guardrail -----------------------------------
+        conversation_context: list[dict] | None = None
+        session_history: list | None = None
+        if self._session_store is not None and session_id:
+            session = self._session_store.get_or_create(session_id)
+            session_history = session.history
+            if session_history:
+                conversation_context = [
+                    {"role": t.role, "text": t.text} for t in session_history
+                ]
+
         t1 = time.perf_counter()
-        gr = self.guardrails.check_input(transcript)
+        gr = self.guardrails.check_input(transcript, conversation_context=conversation_context)
         timings["input_guardrail_ms"] = (time.perf_counter() - t1) * 1000
         timings["input_gr_action"] = gr.action
         logger.info(
@@ -204,11 +215,16 @@ class Pipeline:
         if gr.action != "proceed":
             return self._refuse(gr.reason or gr.action, request_id, timings)
 
+        # --- Query rewriting for multi-turn --------------------------------
+        query_text = transcript.text
+        if session_history:
+            query_text = rewrite_query(transcript.text, session_history)
+
         # --- Retrieval ---------------------------------------------------
         t2 = time.perf_counter()
         try:
             hits = await asyncio.wait_for(
-                self._retrieve(transcript.text),
+                self._retrieve(query_text),
                 timeout=self.settings.retrieval_timeout_s,
             )
         except (RetrievalError, asyncio.TimeoutError) as exc:
@@ -219,7 +235,7 @@ class Pipeline:
             else (hits[-1].score if hits else None)
         )
         retrieval = RetrievalResult(
-            query=transcript.text,
+            query=query_text,
             chunks=hits[:GENERATION_CHUNKS],
             retrieval_latency_ms=(time.perf_counter() - t2) * 1000,
             background_score=background,
@@ -256,7 +272,7 @@ class Pipeline:
 
         # --- Generation (retries + circuit breaker + fallback) ----------
         t4 = time.perf_counter()
-        answer = await self._generate_with_resilience(transcript.text, retrieval.chunks)
+        answer = await self._generate_with_resilience(query_text, retrieval.chunks)
         timings["generation_ms"] = (time.perf_counter() - t4) * 1000
         timings["ttft_ms"] = answer.ttft_ms
         logger.info(
@@ -267,7 +283,7 @@ class Pipeline:
         # --- Layer 3: output guardrail ----------------------------------
         t5 = time.perf_counter()
         gr, answer = self.guardrails.check_output(
-            transcript.text, retrieval.chunks, answer
+            query_text, retrieval.chunks, answer
         )
         timings["output_guardrail_ms"] = (time.perf_counter() - t5) * 1000
         timings["output_gr_action"] = gr.action
@@ -278,7 +294,7 @@ class Pipeline:
         if gr.action != "proceed":
             # Fail closed: fall back to the top passage verbatim instead of
             # surfacing an ungrounded or uncited answer.
-            answer = ExtractiveGenerator().generate(transcript.text, retrieval.chunks)
+            answer = ExtractiveGenerator().generate(query_text, retrieval.chunks)
 
         timings["total_ms"] = sum(v for v in timings.values() if isinstance(v, (int, float)))
 

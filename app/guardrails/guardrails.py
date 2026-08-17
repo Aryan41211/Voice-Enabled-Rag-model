@@ -206,22 +206,28 @@ class InputGuardrail:
         self._centroid /= np.linalg.norm(self._centroid) + 1e-9
         return self._centroid
 
-    def check(self, transcript: Transcript) -> GuardrailResult:
+    def check(
+        self,
+        transcript: Transcript,
+        conversation_context: list[dict] | None = None,
+    ) -> GuardrailResult:
         text = transcript.text.strip()
-        if len(text) < self.min_length:
-            return GuardrailResult(
-                passed=False,
-                layer=self.layer,
-                action="clarify",
-                reason="transcript too short to be a real query",
-            )
-        if len(text.split()) < self.min_tokens:
-            return GuardrailResult(
-                passed=False,
-                layer=self.layer,
-                action="clarify",
-                reason="transcript has too few words to be a real query",
-            )
+        in_conversation = conversation_context is not None and len(conversation_context) >= 2
+        if not in_conversation:
+            if len(text) < self.min_length:
+                return GuardrailResult(
+                    passed=False,
+                    layer=self.layer,
+                    action="clarify",
+                    reason="transcript too short to be a real query",
+                )
+            if len(text.split()) < self.min_tokens:
+                return GuardrailResult(
+                    passed=False,
+                    layer=self.layer,
+                    action="clarify",
+                    reason="transcript has too few words to be a real query",
+                )
         if transcript.confidence < self.min_confidence:
             return GuardrailResult(
                 passed=False,
@@ -405,8 +411,12 @@ class GuardrailPipeline:
         self.retrieval = retrieval_gr or RetrievalGuardrail()
         self.output = output_gr or OutputGuardrail()
 
-    def check_input(self, transcript: Transcript) -> GuardrailResult:
-        return self.input.check(transcript)
+    def check_input(
+        self,
+        transcript: Transcript,
+        conversation_context: list[dict] | None = None,
+    ) -> GuardrailResult:
+        return self.input.check(transcript, conversation_context=conversation_context)
 
     def check_retrieval(self, result: RetrievalResult) -> GuardrailResult:
         return self.retrieval.check(result)
