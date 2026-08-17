@@ -7,6 +7,8 @@ instead of raw strings.
 
 from __future__ import annotations
 
+import time
+from dataclasses import dataclass, field
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -112,3 +114,45 @@ class GenerationError(PipelineStageError):
 class GuardrailError(PipelineStageError):
     def __init__(self, detail: str, retryable: bool = False) -> None:
         super().__init__(stage="guardrail", detail=detail, retryable=retryable)
+
+
+@dataclass
+class ConversationTurn:
+    role: str  # "user" | "assistant"
+    text: str
+    timestamp: float
+    chunks_used: list[str] = field(default_factory=list)
+    guardrail_actions: list[str] = field(default_factory=list)
+
+
+@dataclass
+class SessionState:
+    session_id: str
+    max_turns: int = 10
+    language: str = "hi"
+    history: list[ConversationTurn] = field(default_factory=list)
+    created_at: float = field(default_factory=time.time)
+
+    @property
+    def turn_count(self) -> int:
+        return len(self.history)
+
+    def add_turn(self, turn: ConversationTurn) -> None:
+        self.history.append(turn)
+
+    def recent_history(self, n: int = 3) -> list[ConversationTurn]:
+        return self.history[-n:]
+
+    def last_user_query(self) -> str | None:
+        for turn in reversed(self.history):
+            if turn.role == "user":
+                return turn.text
+        return None
+
+    def get_context_summary(self) -> str:
+        recent = self.recent_history(n=3)
+        lines = []
+        for turn in recent:
+            prefix = "User" if turn.role == "user" else "Assistant"
+            lines.append(f"{prefix}: {turn.text}")
+        return "\n".join(lines)
