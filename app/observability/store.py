@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from pydantic import BaseModel, Field
 
-@dataclass
-class RequestLogEntry:
+
+class RequestLogEntry(BaseModel):
     request_id: str
     timestamp: float
     transcript: str = ""
@@ -18,7 +18,7 @@ class RequestLogEntry:
     answer: str | None = None
     refused: bool = False
     refusal_reason: str | None = None
-    chunk_ids: list[str] = field(default_factory=list)
+    chunk_ids: list[str] = Field(default_factory=list)
     guardrail_input: str = "proceed"
     guardrail_retrieval: str = "proceed"
     guardrail_output: str = "proceed"
@@ -28,7 +28,7 @@ class RequestLogEntry:
     total_latency_ms: float = 0.0
     top_retrieval_score: float | None = None
     explicit_feedback: int | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class LogStore:
@@ -69,8 +69,9 @@ class LogStore:
 
     def log_request(self, entry: RequestLogEntry) -> None:
         self._conn.execute(
-            """INSERT OR REPLACE INTO request_logs VALUES
-               (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            """INSERT INTO request_logs VALUES
+               (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               ON CONFLICT(request_id) DO NOTHING""",
             (
                 entry.request_id, entry.timestamp, entry.transcript, entry.language,
                 entry.answer, int(entry.refused), entry.refusal_reason,
@@ -152,3 +153,9 @@ class LogStore:
 
     def close(self) -> None:
         self._conn.close()
+
+    def __enter__(self) -> LogStore:
+        return self
+
+    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: Any) -> None:
+        self.close()
