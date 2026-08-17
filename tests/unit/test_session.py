@@ -10,13 +10,13 @@ def test_session_state_new_turn():
     assert s.history[0].text == "दिल्ली कहाँ है"
 
 
-def test_session_state_context_window():
+def test_session_state_max_turns():
     s = SessionState(session_id="s1", max_turns=3)
     for i in range(5):
         s.add_turn(ConversationTurn(role="user", text=f"q{i}", timestamp=time.time() + i))
-    assert s.turn_count == 5
-    assert len(s.recent_history(n=3)) == 3
-    assert s.recent_history(n=3)[0].text == "q2"
+    assert s.turn_count == 3
+    assert s.history[0].text == "q2"
+    assert s.history[2].text == "q4"
 
 
 def test_session_store_create_get():

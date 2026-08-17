@@ -138,6 +138,8 @@ class SessionState:
         return len(self.history)
 
     def add_turn(self, turn: ConversationTurn) -> None:
+        if len(self.history) >= self.max_turns:
+            self.history.pop(0)
         self.history.append(turn)
 
     def recent_history(self, n: int = 3) -> list[ConversationTurn]:

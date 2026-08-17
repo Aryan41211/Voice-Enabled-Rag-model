@@ -12,9 +12,8 @@ __all__ = ["ConversationTurn", "SessionState", "SessionStore"]
 class SessionStore:
     """Thread-safe LRU store of session states."""
 
-    def __init__(self, max_sessions: int = 100, idle_timeout_s: float = 3600.0) -> None:
+    def __init__(self, max_sessions: int = 100) -> None:
         self._max_sessions = max_sessions
-        self._idle_timeout_s = idle_timeout_s
         self._sessions: OrderedDict[str, SessionState] = OrderedDict()
         self._lock = threading.Lock()
 
