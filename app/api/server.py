@@ -28,6 +28,8 @@ from app.config import get_settings
 from app.harness.pipeline import Pipeline
 from app.harness.schemas import Transcript
 from app.logging_config import request_context, setup_logging
+from app.observability.store import LogStore
+from app.session.state import SessionStore
 from app.stt.client import FakeSTT, SarvamSTT
 
 logger = logging.getLogger("voice-rag")
@@ -41,6 +43,7 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 class QueryRequest(BaseModel):
     text: str = Field(min_length=1)
     language: str = "hi"
+    session_id: str | None = None
 
 
 class _Health(BaseModel):
@@ -49,6 +52,12 @@ class _Health(BaseModel):
     strategy: str
     generation: str
     stt_provider: str
+    log_stats: dict | None = None
+
+
+class FeedbackRequest(BaseModel):
+    request_id: str
+    feedback: int
 
 
 class Server:
@@ -58,6 +67,8 @@ class Server:
         self.pipeline: Pipeline | None = None
         self.ready = False
         self.health: _Health | None = None
+        self.log_store: LogStore | None = None
+        self.session_store: SessionStore | None = None
 
     def load(self) -> None:
         self.pipeline = Pipeline.from_index(
@@ -85,6 +96,11 @@ class RequestTracingMiddleware(BaseHTTPMiddleware):
 async def _lifespan(app: FastAPI):
     try:
         state.load()
+        state.log_store = LogStore(Path(settings.index_dir) / "logs.db")
+        state.session_store = SessionStore()
+        if state.pipeline is not None:
+            state.pipeline._log_store = state.log_store
+            state.pipeline._session_store = state.session_store
         logger.info("pipeline loaded and warmed up")
     except Exception:
         logger.exception("pipeline failed to load — /query will 503")
@@ -110,12 +126,14 @@ def create_app() -> FastAPI:
     async def health() -> _Health:
         if not state.ready or state.pipeline is None:
             raise HTTPException(status_code=503, detail="pipeline not loaded")
+        log_stats = state.log_store.stats() if state.log_store else None
         return _Health(
             status="ok",
             version=APP_VERSION,
             strategy=settings.data_strategy,
             generation=state.pipeline.generator.name,
             stt_provider=settings.stt_provider,
+            log_stats=log_stats,
         )
 
     @app.post("/query")
@@ -123,7 +141,13 @@ def create_app() -> FastAPI:
         if state.pipeline is None:
             raise HTTPException(status_code=503, detail="pipeline not loaded")
         transcript = Transcript(text=req.text, language=req.language)
-        return (await state.pipeline.query_async(transcript)).model_dump()
+        return (await state.pipeline.query_async(transcript, session_id=req.session_id)).model_dump()
+
+    @app.post("/feedback")
+    async def feedback(request: FeedbackRequest):
+        if state.log_store:
+            state.log_store.set_feedback(request.request_id, request.feedback)
+        return {"status": "ok"}
 
     @app.post("/v1/voice")
     async def voice(audio: UploadFile = File(...)) -> dict:

@@ -223,6 +223,10 @@ def test_pipeline_from_index_wiring(tmp_path, monkeypatch):
     monkeypatch.setattr("app.harness.pipeline.Embedder", FakeEmbedder)
     monkeypatch.setattr("app.harness.pipeline.make_generator", ExtractiveGenerator)
     monkeypatch.setattr("app.guardrails.guardrails.Embedder", FakeEmbedder)
+    monkeypatch.setattr(
+        "app.harness.pipeline.get_settings",
+        lambda: _settings(rerank_enabled=False),
+    )
 
     p = Pipeline.from_index(lang="hi", strategy="metadata", index_dir=tmp_path)
     resp = p.query("दिल्ली कहाँ है")
@@ -305,3 +309,29 @@ def test_pipeline_uncited_answer_falls_back_to_extractive():
     resp = p.query("दिल्ली कहाँ है")
     assert resp.refused is False
     assert resp.answer == "दिल्ली भारत की राजधानी है"
+
+
+def test_pipeline_logs_to_store(tmp_path):
+    from app.observability.store import LogStore
+
+    store = LogStore(tmp_path / "logs.db")
+    p = _pipeline(stt=FakeSTT({"audio_hi": "दिल्ली कहाँ है"}))
+    p._log_store = store
+    resp = p.query("दिल्ली कहाँ है", request_id="test123")
+    assert resp.refused is False
+    entries = store.query()
+    assert len(entries) == 1
+    assert entries[0].request_id == "test123"
+    assert entries[0].transcript == "दिल्ली कहाँ है"
+
+
+def test_pipeline_session_turns_recorded(tmp_path):
+    from app.session.state import SessionStore
+
+    session_store = SessionStore()
+    p = _pipeline()
+    p._session_store = session_store
+    p.query("दिल्ली कहाँ है", session_id="s1")
+    p.query("वहाँ क्या है", session_id="s1")
+    session = session_store.get_or_create("s1")
+    assert session.turn_count >= 2

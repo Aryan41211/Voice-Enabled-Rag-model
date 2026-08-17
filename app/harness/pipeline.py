@@ -15,6 +15,7 @@ Resilience policy (ARCHITECTURE.md):
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 import uuid
 from pathlib import Path
@@ -36,6 +37,8 @@ from app.ingestion.embed import Embedder
 
 BACKGROUND_RANK = 20
 GENERATION_CHUNKS = 5
+
+logger = logging.getLogger("voice-rag")
 
 
 class CircuitBreaker:
@@ -88,6 +91,8 @@ class Pipeline:
             self.settings.circuit_breaker_threshold,
             self.settings.circuit_breaker_reset_s,
         )
+        self._log_store = None
+        self._session_store = None
 
     @classmethod
     def from_index(
@@ -160,10 +165,10 @@ class Pipeline:
             transcript, request_id=request_id, timings=timings
         )
 
-    def query(self, text: str, request_id: str | None = None) -> QueryResponse:
+    def query(self, text: str, request_id: str | None = None, session_id: str | None = None) -> QueryResponse:
         """Synchronous convenience wrapper for scripts / tests."""
         return asyncio.run(
-            self.query_async(Transcript(text=text), request_id=request_id)
+            self.query_async(Transcript(text=text), request_id=request_id, session_id=session_id)
         )
 
     async def query_async(
@@ -171,6 +176,7 @@ class Pipeline:
         transcript: Transcript,
         request_id: str | None = None,
         timings: dict | None = None,
+        session_id: str | None = None,
     ) -> QueryResponse:
         request_id = request_id or uuid.uuid4().hex[:12]
         timings = timings or {}
@@ -180,6 +186,11 @@ class Pipeline:
         t1 = time.perf_counter()
         gr = self.guardrails.check_input(transcript)
         timings["input_guardrail_ms"] = (time.perf_counter() - t1) * 1000
+        timings["input_gr_action"] = gr.action
+        logger.info(
+            "input_guardrail",
+            extra={"stage": "input_guardrail", "success": gr.passed, "latency_ms": timings["input_guardrail_ms"]},
+        )
         if gr.action != "proceed":
             return self._refuse(gr.reason or gr.action, request_id, timings)
 
@@ -213,11 +224,16 @@ class Pipeline:
             )
             for c in retrieval.chunks
         ]
+        logger.info(
+            "retrieval",
+            extra={"stage": "retrieval", "success": True, "latency_ms": timings["retrieval_ms"]},
+        )
 
         # --- Layer 2: retrieval guardrail -------------------------------
         t3 = time.perf_counter()
         gr = self.guardrails.check_retrieval(retrieval)
         timings["retrieval_guardrail_ms"] = (time.perf_counter() - t3) * 1000
+        timings["retrieval_gr_action"] = gr.action
         if gr.action != "proceed":
             return QueryResponse(
                 request_id=request_id,
@@ -233,6 +249,10 @@ class Pipeline:
         answer = await self._generate_with_resilience(transcript.text, retrieval.chunks)
         timings["generation_ms"] = (time.perf_counter() - t4) * 1000
         timings["ttft_ms"] = answer.ttft_ms
+        logger.info(
+            "generation",
+            extra={"stage": "generation", "success": True, "latency_ms": timings["generation_ms"], "ttft_ms": timings.get("ttft_ms")},
+        )
 
         # --- Layer 3: output guardrail ----------------------------------
         t5 = time.perf_counter()
@@ -240,14 +260,19 @@ class Pipeline:
             transcript.text, retrieval.chunks, answer
         )
         timings["output_guardrail_ms"] = (time.perf_counter() - t5) * 1000
+        timings["output_gr_action"] = gr.action
+        logger.info(
+            "output_guardrail",
+            extra={"stage": "output_guardrail", "success": gr.passed, "latency_ms": timings["output_guardrail_ms"]},
+        )
         if gr.action != "proceed":
             # Fail closed: fall back to the top passage verbatim instead of
             # surfacing an ungrounded or uncited answer.
             answer = ExtractiveGenerator().generate(transcript.text, retrieval.chunks)
 
-        timings["total_ms"] = sum(timings.values())
+        timings["total_ms"] = sum(v for v in timings.values() if isinstance(v, (int, float)))
 
-        return QueryResponse(
+        resp = QueryResponse(
             request_id=request_id,
             transcript=transcript.text,
             answer=answer.text,
@@ -255,6 +280,47 @@ class Pipeline:
             sources=sources,
             timings_ms=timings,
         )
+        logger.info(
+            "request_complete",
+            extra={"stage": "total", "success": not resp.refused, "latency_ms": timings["total_ms"]},
+        )
+
+        if self._log_store is not None:
+            from app.observability.store import RequestLogEntry
+
+            self._log_store.log_request(RequestLogEntry(
+                request_id=request_id,
+                timestamp=time.time(),
+                transcript=transcript.text,
+                language=transcript.language,
+                answer=resp.answer,
+                refused=resp.refused,
+                refusal_reason=resp.refusal_reason,
+                chunk_ids=[s.chunk_id for s in resp.sources],
+                guardrail_input=timings.get("input_gr_action", "proceed"),
+                guardrail_retrieval=timings.get("retrieval_gr_action", "proceed"),
+                guardrail_output=timings.get("output_gr_action", "proceed"),
+                stt_latency_ms=timings.get("stt_ms", 0),
+                retrieval_latency_ms=timings.get("retrieval_ms", 0),
+                generation_latency_ms=timings.get("generation_ms", 0),
+                total_latency_ms=timings.get("total_ms", 0),
+                top_retrieval_score=timings.get("top_score"),
+            ))
+
+        if self._session_store is not None and session_id:
+            from app.harness.schemas import ConversationTurn
+
+            session = self._session_store.get_or_create(session_id)
+            session.add_turn(ConversationTurn(
+                role="user", text=transcript.text, timestamp=time.time(),
+                chunks_used=[s.chunk_id for s in resp.sources],
+            ))
+            if resp.answer:
+                session.add_turn(ConversationTurn(
+                    role="assistant", text=resp.answer, timestamp=time.time(),
+                ))
+
+        return resp
 
     async def _retrieve(self, query: str) -> list:
         qv = self.embedder.encode_query(query)
