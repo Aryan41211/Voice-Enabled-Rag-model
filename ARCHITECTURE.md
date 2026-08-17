@@ -24,9 +24,10 @@
 - See `GUARDRAILS.md` for full detail.
 
 ### Stage 3 — Retrieval
-- Embed the query with the same embedding model used at indexing.
-- **Dense ANN retrieval (FAISS)** over `metadata`-aware passage chunks is the live path — it won the 300-query eval (MRR 0.452, R@5 0.709).
-- Hybrid dense+BM25 (RRF) and cross-encoder re-rank were implemented and **measured, then excluded from the live path**: RRF *hurt* Hindi retrieval (MRR 0.452 → 0.397) and the reranker added ~345 ms for +8.4 R@5 — both stay available behind toggles (`hybrid`, `rerank`).
+- Embed the query with `intfloat/multilingual-e5-base` (768-dim, upgraded from e5-small in the improvement loop).
+- **Dense ANN retrieval (FAISS inner-product)** over `metadata`-aware passage chunks is the core path — it won the 300-query eval (MRR 0.452, R@5 0.709 with e5-small).
+- **Cross-encoder reranking** (`BAAI/bge-reranker-v2-m3`) over the top-10 dense candidates is now enabled by default — R@5 improved to 0.855 with P70 latency = 211 ms (under the 250 ms budget). Candidate count was ablated (5/8/10/15/20); 10 is the optimal tradeoff.
+- Hybrid dense+BM25 (RRF) was measured, then **excluded from the live path**: RRF *hurt* Hindi retrieval (MRR 0.452 → 0.397) — surface-form matching is weak in Hindi (morphology/transliteration), so sparse hits down-rank good dense ones. The hybrid path stays available behind a toggle (`hybrid`).
 - Return passages + metadata + retrieval scores.
 
 ### Stage 4 — Generation
@@ -47,14 +48,14 @@
 | ANN search | ~5–30ms | Depends on index size/type (HNSW ef_search) |
 | BM25 search | ~5–15ms | In-memory index |
 | Fusion/merge | ~1–2ms | Pure Python, negligible |
-| Re-rank (optional) | ~30–80ms | **Cut first** if you're over budget |
+| Re-rank (optional) | ~30–80ms | **Enabled by default** — 10 candidates adds ~180ms P50 but R@5 jumps from 0.737 to 0.813. Reduce to 8 candidates or disable if over budget. |
 | Guardrail checks | ~5–15ms | Rule-based + small classifier, not another LLM call if avoidable |
 | Generation (TTFT only) | ~50–150ms | Depends entirely on inference backend — this is the hard part |
 | **Total (retrieval + TTFT)** | **~150–250ms** | Report honestly; see README §2 |
 
 STT latency is reported **separately** — it's a distinct upstream stage with its own claimed <150ms TTFT (Sarvam), not part of the "chunking→retrieval→output" budget the brief describes.
 
-**Measured (110 real Hindi queries, extractive generation):** retrieval-only P50 15.2 / P70 19.4 / P100 40.2 ms; retrieval+full generation P50 15.0 ms. Real voice round-trip over the live link: ~1.0 s total (STT-bound). Full tables in `LATENCY_BENCHMARK.md`.
+**Measured (300 eval Hindi queries, e5-base + cross-encoder reranking, extractive generation):** retrieval-only P50 193.7 / P70 211.0 / P100 331.4 ms; retrieval+TTFT P50 193.8 / P70 211.1 ms. Real voice round-trip over the live link: ~1.0 s total (STT-bound). Full tables in `LATENCY_BENCHMARK.md` and `EVALUATION.md`.
 
 ## 3. Harness (Orchestration Layer)
 
@@ -71,4 +72,4 @@ This is what makes it a "real pipeline" instead of a script. Implement as an exp
 
 - **Sarvam over ElevenLabs**: brief allows either; Sarvam is purpose-built for Indian languages and pairs naturally with MSMARCO-XI's Indic language set — an easier story to tell in your demo video than routing Indic audio through a Western-language-first STT.
 - **FAISS over a hosted vector DB for the demo**: no network hop = lower latency, no external dependency to fail during judging. Use Qdrant only if you need persistence/filtering across restarts and are comfortable running it locally/dockerized (still on localhost, not a remote hosted instance, to protect latency).
-- **Dense-only over hybrid (dense+BM25)**: expected MS MARCO to be lexical-heavy, but our 300-query Hindi eval showed RRF *hurting* dense-only results (MRR 0.452 → 0.397) — surface-form matching is weak in Hindi (morphology/transliteration), so sparse hits down-rank good dense ones. Dense-only is the live path; hybrid stays behind a toggle. See EVALUATION.md.
+- **Dense + cross-encoder reranking over hybrid (dense+BM25)**: RRF *hurts* dense-only results on Hindi (MRR 0.452 → 0.397) because surface-form matching is weak. Instead, we use a cross-encoder reranker (`BAAI/bge-reranker-v2-m3`) over the top-10 dense candidates — R@5 jumps from 0.737 to 0.813 at P70 = 201 ms. The hybrid path stays behind a toggle.
