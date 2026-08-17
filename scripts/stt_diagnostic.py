@@ -12,21 +12,17 @@ import time
 import wave
 from pathlib import Path
 
-import numpy as np
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-import httpx
+import httpx  # noqa: E402
+import numpy as np  # noqa: E402
 
-from app.config import get_settings
-from app.stt.client import (
+from app.config import get_settings  # noqa: E402
+from app.stt.client import (  # noqa: E402
     AUDIO_CHUNK_BYTES,
-    BATCH_BASE_URL,
     DEFAULT_REST_URL,
     DEFAULT_WS_URL,
-    LANGUAGE_CODES,
-    TARGET_SAMPLE_RATE,
     SarvamSTT,
     _to_pcm,
 )
@@ -69,7 +65,9 @@ async def test_diagnostic_websocket():
     print(f"URL: {url}")
     print(f"Language code: {stt.language_code}")
     print(f"PCM bytes: {len(pcm)} ({len(pcm)/32000:.2f}s)")
-    print(f"Chunk size: {AUDIO_CHUNK_BYTES} bytes ({AUDIO_CHUNK_BYTES/2/16000*1000:.1f}ms)")
+    print(
+        f"Chunk size: {AUDIO_CHUNK_BYTES} bytes ({AUDIO_CHUNK_BYTES/2/16000*1000:.1f}ms)"
+    )
     print(f"Chunks: {(len(pcm)+AUDIO_CHUNK_BYTES-1)//AUDIO_CHUNK_BYTES}")
 
     all_events = []
@@ -118,13 +116,17 @@ async def test_diagnostic_websocket():
                     print(f"  [{elapsed:.0f}ms] ERROR: {data}")
                     break
                 else:
-                    print(f"  [{elapsed:.0f}ms] {event}: {json.dumps(data, ensure_ascii=False)[:200]}")
+                    print(
+                        f"  [{elapsed:.0f}ms] {event}: {json.dumps(data, ensure_ascii=False)[:200]}"
+                    )
     except Exception as exc:
         print(f"CONNECTION ERROR: {exc}")
         return
 
     total_ms = (time.perf_counter() - t0) * 1000
-    finals = [e.get("text", "") for e in all_events if e.get("event") == "transcript.final"]
+    finals = [
+        e.get("text", "") for e in all_events if e.get("event") == "transcript.final"
+    ]
     print(f"\nTotal time: {total_ms:.0f}ms")
     print(f"Final transcripts: {len(finals)}")
     for i, f in enumerate(finals):
@@ -188,14 +190,18 @@ async def test_diagnostic_format():
         print(f"WAV file: {wav_path.name}")
         print(f"  Sample rate: {wav.getframerate()} Hz")
         print(f"  Channels: {wav.getnchannels()}")
-        print(f"  Sample width: {wav.getsampwidth()} bytes ({wav.getsampwidth()*8}-bit)")
+        print(
+            f"  Sample width: {wav.getsampwidth()} bytes ({wav.getsampwidth()*8}-bit)"
+        )
         print(f"  Frames: {wav.getnframes()}")
         print(f"  Duration: {wav.getnframes()/wav.getframerate():.3f}s")
-        print(f"  Encoding: PCM {'signed' if wav.getsampwidth() == 2 else 'unsigned'}-int16 LE")
+        print(
+            f"  Encoding: PCM {'signed' if wav.getsampwidth() == 2 else 'unsigned'}-int16 LE"
+        )
 
     # Check PCM after normalization
     pcm = _to_pcm(wav_path)
-    print(f"\nAfter _to_pcm:")
+    print("\nAfter _to_pcm:")
     print(f"  Bytes: {len(pcm)}")
     print(f"  Duration: {len(pcm)/32000:.3f}s (at 16kHz mono 16-bit)")
     print(f"  First 20 bytes (hex): {pcm[:20].hex()}")
@@ -205,16 +211,20 @@ async def test_diagnostic_format():
 
     # Check what WebSocket audio_input message format
     chunk = pcm[:AUDIO_CHUNK_BYTES]
-    msg = json.dumps({
-        "event": "audio_input",
-        "audio": base64.b64encode(chunk).decode(),
-    })
-    print(f"\nWebSocket message (first chunk):")
-    print(f"  Event: audio_input")
-    print(f"  Audio encoding: base64 PCM linear16")
+    msg = json.dumps(
+        {
+            "event": "audio_input",
+            "audio": base64.b64encode(chunk).decode(),
+        }
+    )
+    print("\nWebSocket message (first chunk):")
+    print("  Event: audio_input")
+    print("  Audio encoding: base64 PCM linear16")
     print(f"  Chunk bytes: {len(chunk)}")
     print(f"  Message size: {len(msg)} bytes")
-    print(f"  NOTE: API docs expect AudioData format with data,sample_rate,encoding fields")
+    print(
+        "  NOTE: API docs expect AudioData format with data,sample_rate,encoding fields"
+    )
 
 
 async def test_all_ground_truths():
@@ -248,9 +258,15 @@ async def test_all_ground_truths():
         try:
             headers = {"api-subscription-key": settings.sarvam_api_key}
             files = {"file": (wav.name, wav.read_bytes(), "audio/wav")}
-            data = {"model": "saaras:v3", "language_code": stt.language_code, "with_timestamps": "false"}
+            data = {
+                "model": "saaras:v3",
+                "language_code": stt.language_code,
+                "with_timestamps": "false",
+            }
             async with httpx.AsyncClient(timeout=15) as client:
-                resp = await client.post(DEFAULT_REST_URL, headers=headers, data=data, files=files)
+                resp = await client.post(
+                    DEFAULT_REST_URL, headers=headers, data=data, files=files
+                )
             if resp.status_code == 200:
                 rest_text = resp.json().get("transcript", "")
                 print(f"  REST result: {rest_text}")
