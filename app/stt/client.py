@@ -532,3 +532,13 @@ class FakeSTT:
         return Transcript(
             text=text, language="hi-IN", is_final=True, stt_latency_ms=1.0
         )
+
+
+class ElevenLabsSTT:
+    def __init__(self, api_key: str = "") -> None:
+        self.api_key = api_key
+
+    async def transcribe(self, audio_path: str | Path) -> Transcript:
+        if not self.api_key:
+            raise STTError("ElevenLabs API key not configured")
+        raise STTError("ElevenLabs STT not yet implemented", retryable=True)
