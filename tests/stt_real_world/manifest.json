@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "total_clips": 5,
+  "description": "Seed cases for real-world STT failure modes",
+  "categories": [
+    "overlapping_speech",
+    "distant_mic",
+    "mobile_mic",
+    "accented_speech",
+    "background_noise"
+  ],
+  "clips": [
+    {
+      "id": "rw_01",
+      "path": "C:\\projects\\Voice-Enabled Rag model\\tests\\stt_real_world\\clips\\rw_01.wav",
+      "text": "नमस्ते, आज का मौसम कैसा है",
+      "expected": "नमस्ते, आज का मौसम कैसा है",
+      "language": "hi",
+      "source": "human",
+      "condition": "overlapping_speech",
+      "description": "Two speakers talking simultaneously — one asking about weather while another discusses news",
+      "status": "pending",
+      "category": "overlapping_speech"
+    },
+    {
+      "id": "rw_02",
+      "path": "C:\\projects\\Voice-Enabled Rag model\\tests\\stt_real_world\\clips\\rw_02.wav",
+      "text": "कृपया अगली ट्रेन का समय बताइए",
+      "expected": "कृपया अगली ट्रेन का समय बताइए",
+      "language": "hi",
+      "source": "human",
+      "condition": "distant_mic",
+      "description": "Speaker standing >1m from mic in an open office space",
+      "status": "pending",
+      "category": "distant_mic"
+    },
+    {
+      "id": "rw_03",
+      "path": "C:\\projects\\Voice-Enabled Rag model\\tests\\stt_real_world\\clips\\rw_03.wav",
+      "text": "मुझे अपने बैंक खाते का बैलेंस चेक करना है",
+      "expected": "मुझे अपने बैंक खाते का बैलेंस चेक करना है",
+      "language": "hi",
+      "source": "human",
+      "condition": "mobile_mic",
+      "description": "Recording from a budget Android phone mic (8kHz, low SNR)",
+      "status": "pending",
+      "category": "mobile_mic"
+    },
+    {
+      "id": "rw_04",
+      "path": "C:\\projects\\Voice-Enabled Rag model\\tests\\stt_real_world\\clips\\rw_04.wav",
+      "text": "Hello, mujhe flight booking ki information chahiye",
+      "expected": "Hello, मुझे flight booking की information चाहिए",
+      "language": "hi",
+      "source": "human",
+      "condition": "accented_speech",
+      "description": "Hindi-English code-switching with non-native accent",
+      "status": "pending",
+      "category": "accented_speech"
+    },
+    {
+      "id": "rw_05",
+      "path": "C:\\projects\\Voice-Enabled Rag model\\tests\\stt_real_world\\clips\\rw_05.wav",
+      "text": "यह रेसिपी बहुत आसान है",
+      "expected": "यह रेसिपी बहुत आसान है",
+      "language": "hi",
+      "source": "human",
+      "condition": "background_noise",
+      "description": "Speech recorded with fan noise and background music playing",
+      "status": "pending",
+      "category": "background_noise"
+    }
+  ]
+}
