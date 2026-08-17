@@ -93,3 +93,26 @@ Ground-truth after fixes (through `SarvamSTT().transcribe`, WS primary):
 | 5 | मुझे भारत की नेशनल बर्ड के बारे में इंफॉर्मेशन चाहिए। (code-switched Devanagari) |
 
 Full test suite: 126 passed (was 116). `ruff check` and `ruff format --check` clean.
+
+## IMPROVEMENT ROUND (2026-08-17)
+
+Four commits pushed after the initial fix round, all to `main`:
+
+| Area | Commit | What changed |
+|---|---|---|
+| Answer quality | `cc51a8d` | `ExtractiveGenerator` now sentence-splits top chunks, scores by query-token overlap (stopwords stripped), and returns a crisp fact instead of a verbatim passage dump |
+| Long-audio batch | `ff296be` | `SarvamSTT._transcribe_batch()` — the 7-step async batch job API (initiate → upload-files → PUT → start → poll → download-files → GET transcript). Routed up front from WAV-header duration check (>30 s) and via REST 400 duration-limit error fallback |
+| E2e voice + latency | `7060ee8` | `scripts/e2e_voice.py` — full voice round-trip (edge-tts → Sarvam WS STT → pipeline → answer) on N eval_gold queries with per-stage timings |
+| Frontend + docs | `26982c3` | Enter-to-submit, collapsible `<details>` sources, mic permission error hints; `data/NOTES.md` with corpus expansion steps + latency benchmarks |
+
+### Post-improvement latency (real API)
+
+| Stage | P50 |
+|---|---|
+| Retrieval (hybrid dense+sparse) | ~34 ms |
+| Generation (sentence-extractive) | <1 ms |
+| STT (WS path, short audio) | ~2-3 s |
+| **End-to-end total** | **~3-3.5 s** |
+| Pipeline cold load | ~13 s (SentenceTransformer + FAISS mmap) |
+
+Full test suite: **132 passed** (was 126 after STT fixes). `ruff check` / `ruff format --check` clean.
