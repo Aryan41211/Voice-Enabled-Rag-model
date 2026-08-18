@@ -29,3 +29,8 @@ Thumbs.db
 
 # HF cache
 .cache/huggingface/
+
+# Tool dirs (not part of the project)
+.opencode/
+.superpowers/
+.deepeval/
