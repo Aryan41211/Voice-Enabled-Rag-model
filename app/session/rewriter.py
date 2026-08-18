@@ -15,7 +15,7 @@ _HINDI_PRONOUNS = re.compile(
     r"(वहाँ|उसमें|यहाँ|इसमें|उसका|इसका|उसकी|इसकी|उसके|इसके|उनका|उनकी|वह|यह|इसे|उसे)"
 )
 _ENGLISH_PRONOUNS = re.compile(
-    r"\b(it|that|there|this|those|them|they)\b", re.IGNORECASE
+    r"\b(it|that|there|this|those|them|they|its|their|his|her)\b", re.IGNORECASE
 )
 
 # Topic extraction: find the first proper noun / domain keyword in assistant text
@@ -24,6 +24,22 @@ _TOPIC_PATTERN = re.compile(
     r"|[\u0900-\u097F]{2,})"  # Hindi words ≥2 chars
 )
 
+# English stopwords to skip when extracting topic
+_EN_STOPWORDS = frozenset({
+    "the", "a", "an", "in", "on", "at", "to", "for", "of", "is", "was",
+    "are", "were", "be", "been", "being", "have", "has", "had", "do",
+    "does", "did", "will", "would", "could", "should", "may", "might",
+    "shall", "can", "need", "must", "it", "its", "this", "that", "these",
+    "those", "i", "we", "you", "he", "she", "they", "my", "your", "his",
+    "her", "our", "their", "what", "which", "who", "whom", "where",
+    "when", "how", "why", "all", "each", "every", "both", "few", "more",
+    "most", "other", "some", "such", "no", "not", "only", "own", "same",
+    "so", "than", "too", "very", "just", "because", "as", "until",
+    "while", "about", "between", "through", "during", "before", "after",
+    "above", "below", "from", "up", "down", "out", "off", "over", "under",
+    "again", "further", "then", "once",
+})
+
 
 def _extract_topic(assistant_text: str) -> str | None:
     """Extract the first significant topic word from assistant text."""
@@ -31,10 +47,11 @@ def _extract_topic(assistant_text: str) -> str | None:
     hindi_match = re.search(r"([\u0900-\u097F]{3,})", assistant_text)
     if hindi_match:
         return hindi_match.group(1)
-    # Fall back to English proper noun
-    eng_match = re.search(r"\b([A-Z][a-zA-Z]+(?:\s*[-–]\s*\d+)?)\b", assistant_text)
-    if eng_match:
-        return eng_match.group(1)
+    # Fall back to English proper noun, skipping stopwords
+    for match in re.finditer(r"\b([A-Z][a-zA-Z]+(?:\s*[-–]\s*\d+)?)\b", assistant_text):
+        word = match.group(1)
+        if word.lower() not in _EN_STOPWORDS:
+            return word
     return None
 
 

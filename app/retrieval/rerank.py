@@ -18,17 +18,22 @@ from app.harness.schemas import RetrievedChunk
 DEFAULT_RERANKER = "BAAI/bge-reranker-v2-m3"
 
 
+DEFAULT_CONFIDENCE_THRESHOLD = 0.85
+
+
 class CrossEncoderReranker:
     def __init__(
         self,
         model_name: str | None = None,
         device: str | None = None,
         batch_size: int = 8,
+        confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
     ) -> None:
         settings = get_settings()
         self.model_name = model_name or DEFAULT_RERANKER
         self.device = device or settings.device_resolved
         self.batch_size = batch_size
+        self.confidence_threshold = confidence_threshold
         self._model: Any = None
 
     def _load(self) -> Any:
@@ -69,6 +74,12 @@ class CrossEncoderReranker:
         if top_n is not None:
             reranked = reranked[:top_n]
         return reranked
+
+    def should_rerank(self, hits: list[RetrievedChunk]) -> bool:
+        """Adaptive check: skip reranking when top-1 confidence is high."""
+        if not hits:
+            return False
+        return hits[0].score < self.confidence_threshold
 
     def clear(self) -> None:
         self._model = None

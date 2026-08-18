@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     rerank_enabled: bool = True
     rerank_candidates: int = 10
     rerank_model: str = "BAAI/bge-reranker-v2-m3"
+    rerank_adaptive: bool = True  # skip rerank when top-1 confidence is high
 
     # Generation
     llm_provider: str = "extractive"  # extractive | groq

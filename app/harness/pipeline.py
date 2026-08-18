@@ -42,22 +42,51 @@ GENERATION_CHUNKS = 5
 logger = logging.getLogger("voice-rag")
 
 
+class _EmbeddingCache:
+    """LRU cache for query embeddings to skip redundant encoding in multi-turn."""
+
+    def __init__(self, max_size: int = 128) -> None:
+        self._cache: dict[str, Any] = {}
+        self._max_size = max_size
+
+    def get(self, query: str) -> Any | None:
+        return self._cache.get(query)
+
+    def put(self, query: str, vec: Any) -> None:
+        if len(self._cache) >= self._max_size:
+            # Evict oldest (dict maintains insertion order in Python 3.7+)
+            self._cache.pop(next(iter(self._cache)))
+        self._cache[query] = vec
+
+
 class _RerankedDense:
-    """Wraps a dense retriever with cross-encoder reranking.
+    """Wraps a dense retriever with adaptive cross-encoder reranking.
 
     Preserves the original dense score on each chunk so retrieval guardrails
     (which compare against background_score) remain valid.
+
+    Adaptive: skips reranking when the top-1 dense score exceeds a
+    high-confidence threshold, only reranking ambiguous cases.
     """
 
-    def __init__(self, dense_retriever, reranker, top_n: int = 10) -> None:
+    def __init__(
+        self,
+        dense_retriever,
+        reranker,
+        top_n: int = 10,
+        adaptive: bool = True,
+    ) -> None:
         self._dense = dense_retriever
         self._reranker = reranker
         self._top_n = top_n
+        self._adaptive = adaptive
 
     def search(self, query_vector, k: int = 20, query_text: str = "") -> list:
         candidates = self._dense.search(query_vector, k=k, query_text=query_text)
         if not candidates or not query_text:
             return candidates
+        if self._adaptive and not self._reranker.should_rerank(candidates):
+            return candidates[: self._top_n]
         reranked = self._reranker.rerank(query_text, candidates, top_n=self._top_n)
         return reranked
 
@@ -112,6 +141,7 @@ class Pipeline:
             self.settings.circuit_breaker_threshold,
             self.settings.circuit_breaker_reset_s,
         )
+        self._embedding_cache = _EmbeddingCache()
         self._log_store = None
         self._session_store = None
 
@@ -133,7 +163,8 @@ class Pipeline:
 
             reranker = CrossEncoderReranker(model_name=settings.rerank_model)
             retriever = _RerankedDense(
-                dense, reranker, top_n=settings.rerank_candidates
+                dense, reranker, top_n=settings.rerank_candidates,
+                adaptive=settings.rerank_adaptive,
             )
         embedder = Embedder()
         guardrails = GuardrailPipeline()
@@ -378,7 +409,12 @@ class Pipeline:
         return resp
 
     async def _retrieve(self, query: str) -> list:
-        qv = self.embedder.encode_query(query)
+        cached = self._embedding_cache.get(query)
+        if cached is not None:
+            qv = cached
+        else:
+            qv = self.embedder.encode_query(query)
+            self._embedding_cache.put(query, qv)
         hits = await asyncio.to_thread(
             self.retriever.search, qv, k=BACKGROUND_RANK, query_text=query
         )
