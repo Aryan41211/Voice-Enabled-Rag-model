@@ -54,17 +54,47 @@ def match_key(chunk) -> str:
 
 # ─── Stress test query categories ──────────────────────────────────────
 
-# Typos and STT errors — realistic homophone/misspelling variants
-TYPO_VARIANTS = [
-    # Hindi typos (Devanagari character swaps, common STT errors)
-    {"original": "भारत का राष्ट्रीय पक्षी क्या है", "variant": "भारत का राष्ट्रिय पक्षी क्या है", "type": "typo_hindi_vowel"},
-    {"original": "गांधी जी का जन्म कब हुआ", "variant": "गांधी जी का जनम कब हुआ", "type": "typo_hindi_consonant"},
-    {"original": "ताजमहल कहाँ है", "variant": "ताज महल कहा है", "type": "typo_hindi_split"},
-    # English typos
-    {"original": "What is the capital of France", "variant": "What is the capitl of Frnace", "type": "typo_english_misspell"},
-    {"original": "Who invented the telephone", "variant": "Who inveted the telephone", "type": "typo_english_skip"},
-    {"original": "When was Python created", "variant": "When was Phyton created", "type": "typo_english_transpose"},
-]
+# Devanagari character neighbors (common STT confusion pairs)
+_DEVANAGARI_NEIGHBORS = {
+    "ा": "ि", "ि": "ा", "ी": "े", "े": "ी", "ो": "ू", "ू": "ो",
+    "क": "ख", "ख": "क", "ग": "घ", "घ": "ग",
+    "त": "थ", "थ": "त", "द": "ध", "ध": "द",
+    "प": "फ", "फ": "प", "ब": "भ", "भ": "ब",
+    "म": "न", "न": "म", "र": "ल", "ल": "र",
+    "श": "ष", "ष": "श", "स": "ह", "ह": "स",
+}
+
+
+def _generate_typo_variants(eval_gold: list[dict], n: int = 20) -> list[dict]:
+    """Generate typo variants from actual eval queries using character perturbation."""
+    import random
+    random.seed(42)
+
+    candidates = [r for r in eval_gold if len(r["query"]) >= 10]
+    selected = random.sample(candidates, min(n, len(candidates)))
+
+    variants = []
+    for rec in selected:
+        q = rec["query"]
+        # Pick a random character to perturb
+        chars = list(q)
+        idx = random.randint(0, len(chars) - 1)
+        orig_char = chars[idx]
+        if orig_char in _DEVANAGARI_NEIGHBORS:
+            chars[idx] = _DEVANAGARI_NEIGHBORS[orig_char]
+        else:
+            # Skip character (STT omission)
+            chars.pop(idx)
+            if not chars:
+                continue
+        variant = "".join(chars)
+        if variant != q:
+            variants.append({
+                "original": q,
+                "variant": variant,
+                "type": "typo_char_swap",
+            })
+    return variants
 
 # Long / run-on queries
 LONG_QUERIES = [
@@ -120,8 +150,13 @@ def test_typo_robustness(
     # Build a lookup from original query to gold
     gold_by_query = {rec["query"]: gold_ids(rec) for rec in eval_gold}
 
+    # Generate typo variants from actual eval queries
+    typo_variants = _generate_typo_variants(eval_gold, n=20)
+    if not typo_variants:
+        return {"error": "could not generate typo variants"}
+
     results = []
-    for variant in TYPO_VARIANTS:
+    for variant in typo_variants:
         orig = variant["original"]
         if orig not in gold_by_query:
             continue

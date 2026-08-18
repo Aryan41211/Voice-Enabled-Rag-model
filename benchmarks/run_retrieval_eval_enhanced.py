@@ -175,7 +175,7 @@ def main():
     try:
         chunks = load_chunks(args.lang, "metadata", index_dir)
         dense = load_dense(args.lang, "metadata", chunks, index_dir)
-        sparse = load_sparse(args.lang, "metadata", index_dir)
+        sparse = load_sparse(args.lang, "metadata", chunks, index_dir)
     except IndexNotFoundError as e:
         print(f"[eval-enhanced] {e}")
         sys.exit(1)

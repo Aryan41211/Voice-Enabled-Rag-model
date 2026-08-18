@@ -73,6 +73,13 @@ def evaluate_single(
     }
 
 
+def _embedder_for_strategy(lang: str, strategy: str, index_dir: Path) -> Embedder:
+    """Load the correct embedder based on the strategy's manifest."""
+    manifest = load_manifest(lang, strategy, index_dir)
+    model = manifest.get("embedding_model", "intfloat/multilingual-e5-base")
+    return Embedder(model_name=model)
+
+
 def sweep_parameters(
     lang: str,
     index_dir: Path,
@@ -90,13 +97,15 @@ def sweep_parameters(
         try:
             chunks = load_chunks(lang, strategy, index_dir)
             dense = load_dense(lang, strategy, chunks, index_dir)
+            strategy_embedder = _embedder_for_strategy(lang, strategy, index_dir)
+            strategy_embedder.encode_query("warmup")
         except IndexNotFoundError:
             continue
 
         agg = {"recall_3": [], "recall_5": [], "mrr": [], "latency_ms": []}
         for rec in gold_records:
             gold = gold_ids(rec)
-            metrics = evaluate_single(dense, rec["query"], embedder, gold, k)
+            metrics = evaluate_single(dense, rec["query"], strategy_embedder, gold, k)
             for mk, v in metrics.items():
                 agg[mk].append(v)
 
@@ -127,6 +136,8 @@ def test_language_filter(
     try:
         chunks = load_chunks(lang, "metadata", index_dir)
         dense = load_dense(lang, "metadata", chunks, index_dir)
+        meta_embedder = _embedder_for_strategy(lang, "metadata", index_dir)
+        meta_embedder.encode_query("warmup")
     except IndexNotFoundError:
         return {"error": "metadata index not found"}
 
@@ -139,11 +150,11 @@ def test_language_filter(
         query = rec["query"]
 
         # Unfiltered
-        metrics = evaluate_single(dense, query, embedder, gold, k)
+        metrics = evaluate_single(dense, query, meta_embedder, gold, k)
         unfiltered_results.append(metrics)
 
         # Filtered: only consider chunks matching the query language
-        qv = embedder.encode_query(query)
+        qv = meta_embedder.encode_query(query)
         hits = dense.search(qv, k=k * 3, query_text=query)
         lang_filtered = [h for h in hits if h.metadata.get("language") == lang][:k]
         ranked = [match_key(h) for h in lang_filtered]
@@ -185,6 +196,8 @@ def test_hierarchical_precision(
     try:
         chunks = load_chunks(lang, "hierarchical", index_dir)
         dense = load_dense(lang, "hierarchical", chunks, index_dir)
+        hier_embedder = _embedder_for_strategy(lang, "hierarchical", index_dir)
+        hier_embedder.encode_query("warmup")
     except IndexNotFoundError:
         return {"error": "hierarchical index not found"}
 
@@ -196,11 +209,11 @@ def test_hierarchical_precision(
         query = rec["query"]
 
         # Standard child retrieval
-        metrics = evaluate_single(dense, query, embedder, gold, k)
+        metrics = evaluate_single(dense, query, hier_embedder, gold, k)
         child_results.append(metrics)
 
         # Parent-chunk retrieval: group by parent_chunk_id, score by max child
-        qv = embedder.encode_query(query)
+        qv = hier_embedder.encode_query(query)
         hits = dense.search(qv, k=k * 5, query_text=query)
         parent_groups: dict[str, list] = {}
         for h in hits:
@@ -246,6 +259,8 @@ def per_category_breakdown(
     try:
         chunks = load_chunks(lang, "metadata", index_dir)
         dense = load_dense(lang, "metadata", chunks, index_dir)
+        meta_embedder = _embedder_for_strategy(lang, "metadata", index_dir)
+        meta_embedder.encode_query("warmup")
     except IndexNotFoundError:
         return {"error": "metadata index not found"}
 
@@ -268,7 +283,7 @@ def per_category_breakdown(
         agg_r5, agg_mrr = [], []
         for rec in records:
             gold = gold_ids(rec)
-            metrics = evaluate_single(dense, rec["query"], embedder, gold, k)
+            metrics = evaluate_single(dense, rec["query"], meta_embedder, gold, k)
             agg_r5.append(metrics["recall_5"])
             agg_mrr.append(metrics["mrr"])
         n = len(records)
