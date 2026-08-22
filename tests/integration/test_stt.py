@@ -87,7 +87,11 @@ class FakeWebsockets:
 
 
 def _patch_ws(monkeypatch, messages=None, exc=None):
+    """Fake the websockets module; returns the list of connect URLs seen."""
+    urls = []
+
     def fake_connect(url, **kwargs):
+        urls.append(url)
         if exc is not None:
             raise exc
         return FakeWebsockets(messages or [])
@@ -96,6 +100,7 @@ def _patch_ws(monkeypatch, messages=None, exc=None):
 
     fake_mod = types.SimpleNamespace(connect=fake_connect)
     monkeypatch.setattr(sttmod, "_get_websockets", lambda: fake_mod)
+    return urls
 
 
 def _make_wav(path, frames=b"\x00\x00" * 1600, rate=16000, channels=1, duration_s=None):
@@ -205,9 +210,17 @@ def test_rest_transcribe_parses_transcript(monkeypatch, tmp_path):
 
 
 def test_ws_transcript_used_first(monkeypatch, tmp_path):
+    # Fixed-language deployments use the realtime WS first; when the WS
+    # yields a transcript it must win with NO REST round-trip (previously
+    # this test silently hit the live REST API when routing changed).
     p = tmp_path / "a.wav"
     _make_wav(p)
-    _patch_ws(
+
+    def no_rest(url, headers, data, files):
+        raise AssertionError("REST must not be called when WS succeeds")
+
+    orig = _rest_client(no_rest)
+    urls = _patch_ws(
         monkeypatch,
         messages=[
             '{"event":"session.begin"}',
@@ -215,9 +228,16 @@ def test_ws_transcript_used_first(monkeypatch, tmp_path):
             '{"event":"session.end"}',
         ],
     )
-    stt = SarvamSTT(api_key="k")
-    result = asyncio.run(stt.transcribe(str(p)))
-    assert result.text == "हैलो"
+    try:
+        stt = SarvamSTT(api_key="k", language_code="hi")
+        result = asyncio.run(stt.transcribe(str(p)))
+        assert result.text == "हैलो"
+        # The requested fixed language is what the WS was opened with and
+        # what the Transcript reports back.
+        assert len(urls) == 1 and "language_code=hi-IN" in urls[0]
+        assert result.language == "hi-IN"
+    finally:
+        sttmod.httpx.AsyncClient = orig
 
 
 class HangingWSResult:
@@ -259,7 +279,9 @@ def test_ws_timeout_falls_back_to_rest(monkeypatch, tmp_path):
 
     orig = _rest_client(handler)
     try:
-        stt = SarvamSTT(api_key="k", timeout_s=1.0)
+        # Fixed language keeps the WS-first flow active (auto-detect skips
+        # WS entirely), so this genuinely exercises timeout -> REST fallback.
+        stt = SarvamSTT(api_key="k", language_code="hi", timeout_s=1.0)
         result = asyncio.run(stt.transcribe(str(p)))
         assert result.text == "लंबा ऑडियो ठीक रहा"
     finally:
@@ -272,7 +294,12 @@ def test_ws_joins_multiple_finals(monkeypatch, tmp_path):
     # to the first (previously it broke on the first final).
     p = tmp_path / "a.wav"
     _make_wav(p)
-    _patch_ws(
+
+    def no_rest(url, headers, data, files):
+        raise AssertionError("REST must not be called when WS succeeds")
+
+    orig = _rest_client(no_rest)
+    urls = _patch_ws(
         monkeypatch,
         messages=[
             '{"event":"session.begin"}',
@@ -281,9 +308,14 @@ def test_ws_joins_multiple_finals(monkeypatch, tmp_path):
             '{"event":"session.end"}',
         ],
     )
-    stt = SarvamSTT(api_key="k")
-    result = asyncio.run(stt.transcribe(str(p)))
-    assert result.text == "पहला वाक्य। दूसरा वाक्य?"
+    try:
+        stt = SarvamSTT(api_key="k", language_code="hi")
+        result = asyncio.run(stt.transcribe(str(p)))
+        assert result.text == "पहला वाक्य। दूसरा वाक्य?"
+        assert len(urls) == 1 and "language_code=hi-IN" in urls[0]
+        assert result.language == "hi-IN"
+    finally:
+        sttmod.httpx.AsyncClient = orig
 
 
 def test_ws_empty_finals_fall_back_to_rest(monkeypatch, tmp_path):
@@ -298,7 +330,9 @@ def test_ws_empty_finals_fall_back_to_rest(monkeypatch, tmp_path):
 
     orig = _rest_client(handler)
     try:
-        stt = SarvamSTT(api_key="k")
+        # Fixed language so the WS-empty-finals -> REST fallback is actually
+        # exercised (auto-detect would skip the WS entirely).
+        stt = SarvamSTT(api_key="k", language_code="hi")
         result = asyncio.run(stt.transcribe(str(p)))
         assert result.text == "rest तो ठीक है"
     finally:
@@ -306,18 +340,66 @@ def test_ws_empty_finals_fall_back_to_rest(monkeypatch, tmp_path):
 
 
 def test_ws_error_is_fatal(monkeypatch, tmp_path):
+    # Fixed language so the fatal error genuinely comes from the WS handler
+    # (auto-detect would skip WS and fail via REST instead — or worse, hit
+    # the live API when no REST fake is installed).
     p = tmp_path / "a.wav"
     _make_wav(p)
-    _patch_ws(
+    urls = _patch_ws(
         monkeypatch,
         messages=['{"event":"error","is_fatal":true,"message":"quota"}'],
     )
-    stt = SarvamSTT(api_key="k")
+    stt = SarvamSTT(api_key="k", language_code="hi")
     try:
         asyncio.run(stt.transcribe(str(p)))
         assert False, "should have raised"
     except STTError:
         pass
+    assert len(urls) == 1 and "language_code=hi-IN" in urls[0]
+
+
+def test_auto_detect_routes_to_rest_and_reports_language(monkeypatch, tmp_path):
+    # STT_LANGUAGE=auto (the default) must route short clips straight to REST
+    # — never WS, whose "auto" implies translate-to-English. The request must
+    # carry language_code=unknown + mode=transcribe, and the API-reported
+    # language/probability must surface on the Transcript.
+    p = tmp_path / "a.wav"
+    _make_wav(p)
+    seen = {}
+
+    def handler(url, headers, data, files):
+        seen["url"] = url
+        seen["data"] = data
+        return FakeResponse(
+            200,
+            {
+                "transcript": "ভারতের জাতীয় পাখি কি?",
+                "language_code": "bn-IN",
+                "language_probability": 0.94,
+            },
+        )
+
+    orig = _rest_client(handler)
+
+    def never_ws(url, **kwargs):
+        raise AssertionError("WS must not be attempted in auto-detect mode")
+
+    import types
+
+    monkeypatch.setattr(
+        sttmod, "_get_websockets", lambda: types.SimpleNamespace(connect=never_ws)
+    )
+    try:
+        stt = SarvamSTT(api_key="k", language_code="auto")
+        result = asyncio.run(stt.transcribe(str(p)))
+        assert result.text == "ভারতের জাতীয় পাখি কি?"
+        assert seen["url"] == DEFAULT_REST_URL
+        assert seen["data"]["language_code"] == "unknown"
+        assert seen["data"]["mode"] == "transcribe"
+        assert result.language == "bn-IN"
+        assert abs(result.confidence - 0.94) < 1e-9
+    finally:
+        sttmod.httpx.AsyncClient = orig
 
 
 def _batch_client(job_id="j1", transcript="लंबा ऑडियो ठीक", state="Completed"):

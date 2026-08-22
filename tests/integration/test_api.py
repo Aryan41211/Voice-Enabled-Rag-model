@@ -63,7 +63,10 @@ def test_index_serves_voice_ui(monkeypatch):
     with TestClient(server.create_app()) as client:
         r = client.get("/")
         assert r.status_code == 200
-        assert "रिकॉर्ड करें" in r.text
+        # UI is English; assert on stable structural markers (title, record
+        # button id) rather than display text so the test survives label edits.
+        assert "<title>Voice RAG</title>" in r.text
+        assert 'id="recBtn"' in r.text
         assert "/v1/voice" in r.text
 
 
