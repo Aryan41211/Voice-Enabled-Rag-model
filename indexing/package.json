@@ -1,0 +1,35 @@
+{
+  "name": "indexing",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "index": "npx tsx index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@duckdb/node-api": "^1.5.5-r.4",
+    "@huggingface/hub": "^2.15.0",
+    "@langchain/textsplitters": "^1.0.1",
+    "@xenova/transformers": "^2.17.2",
+    "better-sqlite3": "^13.0.3",
+    "dotenv": "^16.4.5",
+    "faiss-napi": "^0.10.3",
+    "p-limit": "^7.3.1",
+    "pino": "^9.4.0",
+    "pino-pretty": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.2.0",
+    "tsx": "^4.23.12"
+  },
+  "overrides": {
+    "sharp": "^0.35.3",
+    "protobufjs": "^7.4.0"
+  }
+}
