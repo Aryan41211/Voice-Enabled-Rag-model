@@ -103,8 +103,27 @@ Rate each on a 1–5 scale, or pass/fail — pick one and be consistent.
 
 **Caveat: These are synthetic (TTS) clips, not real-microphone recordings.** TTS audio is cleaner than real-world speech (no background noise, consistent pronunciation, studio-quality mic simulation). Real-microphone WER is expected to be higher. Real-mic test data has not yet been collected.
 
+### 5.1 Browser Voice Path (end-to-end, language auto-detect)
+
+The full in-browser pipeline (mic capture → WebM/Opus → client-side WAV conversion → `/v1/voice`) was exercised with Playwright driving `--use-file-for-fake-audio-capture` against the same 20 clips. STT runs in **auto-detect** mode (`STT_LANGUAGE=auto`): the Sarvam REST endpoint (`saaras:v3`, `language_code=unknown`, `mode=transcribe`) performs LID and returns the detected `language_code` per request; the detected language is surfaced to clients as `transcript_language` on both success and refusal responses.
+
+| Language | Clips | Direct API WER | Browser path WER | Delta |
+|---|---|---|---|---|
+| Hindi | 12 | 0.0% | 4.3% | +4.3% |
+| Bengali | 4 | 0.0% | 0.0% | 0.0% |
+| Tamil | 4 | 6.3% | 18.8% | +12.5% |
+| **Overall** | **20** | **2.5%** | **6.3%** | **+3.8%** |
+
+All 20 clips produced valid audio blobs and transcripts through the browser (20/20 OK); residual deltas are test-rig artifacts of the looping fake microphone duplicating clip-initial words at window tail (e.g., hi_01 +2 words), not recognition regressions — re-sending browser-captured WAVs directly to the API reproduces ~0% WER.
+
+Endpoint notes (verified live):
+- Realtime WS (`saaras:v3-realtime`) rejects `unknown`; its `auto` value implies detect-and-translate-to-English regardless of `mode`. Auto-detect is therefore routed to the sync REST endpoint for clips < 30 s (batch API keeps `unknown` for longer files).
+- Detected language + probability are logged per request (`[stt]` console line) and returned as `transcript_language`.
+
 ## 6. Known Limitations
 - **STT WER is measured on synthetic (TTS) audio only** — real-microphone recordings have not been collected. TTS audio is cleaner than real-world speech (no background noise, consistent pronunciation). Real-mic WER is expected to be higher. See Section 5 for details.
+- STT language selection defaults to auto-detect (`STT_LANGUAGE=auto`); a fixed language can still be pinned via env for single-language deployments.
+- Bengali/Tamil voice queries are transcribed correctly (auto-LID), but the retrieval index is built from the Hindi split, so non-Hindi queries score below the retrieval floor and are refused ("top score below floor") — the heard language is still reported via `transcript_language`. Multi-lingual indexes are future work.
 - Retrieval corpus is a 1,500-query sample (~15K passages) of the Hindi validation split — generalization to other 12 languages and the full corpus is not yet verified.
 - Hybrid (dense + BM25) hurt results on this Hindi subset; BM25 is known to be weak on highly inflected Hindi. Re-evaluate if supporting a more analytic language (e.g. English source passages).
 - Semantic chunking adds ~98 s of offline build time for no retrieval gain at this corpus size (passages are already short).
