@@ -1,40 +1,21 @@
-# Environment / secrets
-.env
-*.env.local
-
 # Python
 __pycache__/
 *.py[cod]
-*.egg-info/
 .venv/
 venv/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-htmlcov/
 
-# Data artifacts (cached datasets + built indexes live in data/)
-data/raw/
-data/index/
-benchmarks/results/*.json
-benchmarks/results/*.csv
+# Data and models (large binaries; rebuildable via scripts/)
+data/
+indexes/
 
-# Editor / OS
-.idea/
-.vscode/
-*.swp
-.DS_Store
+# Environment
+.env
+
+# Logs
+*.log
+*.err
+logs/
+
+# OS
 Thumbs.db
-
-# HF cache
-.cache/huggingface/
-
-# Tool dirs (not part of the project)
-.opencode/
-.superpowers/
-.deepeval/
-
-# browser e2e test deps
-node_modules/
-tests/browser_e2e/_cycle_*.json
+.DS_Store
