@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-08-18T00:04:39",
+  "timestamp": "2026-08-21T22:59:23",
   "total_clips": 20,
   "evaluated": 20,
   "average_wer": 0.025,
@@ -17,7 +17,7 @@
       "ref_words": 7,
       "hyp_words": 7,
       "errors": [],
-      "latency_ms": 1670
+      "latency_ms": 5030
     },
     {
       "id": "hi_02",
@@ -30,7 +30,7 @@
       "ref_words": 7,
       "hyp_words": 7,
       "errors": [],
-      "latency_ms": 1312
+      "latency_ms": 3628
     },
     {
       "id": "hi_03",
@@ -43,7 +43,7 @@
       "ref_words": 9,
       "hyp_words": 9,
       "errors": [],
-      "latency_ms": 1314
+      "latency_ms": 4663
     },
     {
       "id": "hi_04",
@@ -56,7 +56,7 @@
       "ref_words": 9,
       "hyp_words": 9,
       "errors": [],
-      "latency_ms": 1150
+      "latency_ms": 6589
     },
     {
       "id": "hi_05",
@@ -69,7 +69,7 @@
       "ref_words": 10,
       "hyp_words": 10,
       "errors": [],
-      "latency_ms": 1300
+      "latency_ms": 3689
     },
     {
       "id": "hi_06",
@@ -82,7 +82,7 @@
       "ref_words": 7,
       "hyp_words": 7,
       "errors": [],
-      "latency_ms": 1198
+      "latency_ms": 6398
     },
     {
       "id": "hi_07",
@@ -95,7 +95,7 @@
       "ref_words": 8,
       "hyp_words": 8,
       "errors": [],
-      "latency_ms": 933
+      "latency_ms": 5144
     },
     {
       "id": "hi_08",
@@ -108,7 +108,7 @@
       "ref_words": 10,
       "hyp_words": 10,
       "errors": [],
-      "latency_ms": 799
+      "latency_ms": 4724
     },
     {
       "id": "hi_09",
@@ -121,7 +121,7 @@
       "ref_words": 6,
       "hyp_words": 6,
       "errors": [],
-      "latency_ms": 705
+      "latency_ms": 2232
     },
     {
       "id": "hi_10",
@@ -134,7 +134,7 @@
       "ref_words": 6,
       "hyp_words": 6,
       "errors": [],
-      "latency_ms": 630
+      "latency_ms": 2778
     },
     {
       "id": "hi_11",
@@ -147,7 +147,7 @@
       "ref_words": 8,
       "hyp_words": 8,
       "errors": [],
-      "latency_ms": 920
+      "latency_ms": 3498
     },
     {
       "id": "hi_12",
@@ -160,7 +160,7 @@
       "ref_words": 7,
       "hyp_words": 7,
       "errors": [],
-      "latency_ms": 776
+      "latency_ms": 4494
     },
     {
       "id": "bn_01",
@@ -173,20 +173,20 @@
       "ref_words": 4,
       "hyp_words": 4,
       "errors": [],
-      "latency_ms": 677
+      "latency_ms": 2740
     },
     {
       "id": "bn_02",
       "language": "bn",
       "category": "clear",
       "expected": "কৃত্রিম বুদ্ধিমত্তা কীভাবে কাজ করে",
-      "actual": "কৃত্রিম বুদ্ধিমত্তা কিভাবে কাজ করে?",
+      "actual": "কৃত্রিম বুদ্ধিমত্তা কীভাবে কাজ করে?",
       "wer": 0.0,
       "word_errors": 0,
       "ref_words": 5,
       "hyp_words": 5,
       "errors": [],
-      "latency_ms": 786
+      "latency_ms": 5260
     },
     {
       "id": "bn_03",
@@ -199,7 +199,7 @@
       "ref_words": 4,
       "hyp_words": 4,
       "errors": [],
-      "latency_ms": 1001
+      "latency_ms": 5280
     },
     {
       "id": "bn_04",
@@ -212,7 +212,7 @@
       "ref_words": 5,
       "hyp_words": 5,
       "errors": [],
-      "latency_ms": 756
+      "latency_ms": 3330
     },
     {
       "id": "ta_01",
@@ -225,7 +225,7 @@
       "ref_words": 4,
       "hyp_words": 4,
       "errors": [],
-      "latency_ms": 703
+      "latency_ms": 5498
     },
     {
       "id": "ta_02",
@@ -238,7 +238,7 @@
       "ref_words": 4,
       "hyp_words": 4,
       "errors": [],
-      "latency_ms": 798
+      "latency_ms": 2670
     },
     {
       "id": "ta_03",
@@ -262,7 +262,7 @@
           "hyp": "உளளத"
         }
       ],
-      "latency_ms": 842
+      "latency_ms": 3162
     },
     {
       "id": "ta_04",
@@ -275,7 +275,7 @@
       "ref_words": 4,
       "hyp_words": 4,
       "errors": [],
-      "latency_ms": 917
+      "latency_ms": 7470
     }
   ]
 }

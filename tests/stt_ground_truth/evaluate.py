@@ -222,14 +222,14 @@ async def main() -> None:
         print(f"AGGREGATE: {len(valid)}/{len(clips)} clips evaluated")
         print(f"  Average WER: {avg_wer:.1%}")
         print(f"  Max WER:     {max_wer:.1%}")
-        print(f"  Target:      <10%")
+        print("  Target:      <10%")
         print(f"  Status:      {'PASS' if avg_wer < 0.10 else 'FAIL'}")
 
-        print(f"\n  By language:")
+        print("\n  By language:")
         for lang, wers in sorted(by_lang.items()):
             print(f"    {lang}: avg={sum(wers)/len(wers):.1%} (n={len(wers)})")
 
-        print(f"\n  By category:")
+        print("\n  By category:")
         for cat, wers in sorted(by_cat.items()):
             print(f"    {cat}: avg={sum(wers)/len(wers):.1%} (n={len(wers)})")
 
@@ -243,7 +243,7 @@ async def main() -> None:
             from collections import Counter
 
             freq = Counter(all_errors).most_common(10)
-            print(f"\n  Most common word errors:")
+            print("\n  Most common word errors:")
             for (ref, hyp), count in freq:
                 print(f"    {ref or '∅':>20s} → {hyp or '∅':<20s}  (×{count})")
 
