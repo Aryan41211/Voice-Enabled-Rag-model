@@ -28,6 +28,12 @@ function useRagExperience() {
     const assistantMsgId = crypto.randomUUID();
     const isAudio = payload instanceof Blob;
 
+    const normalizedPayload = isAudio
+      ? null
+      : typeof payload === "string"
+        ? { query: payload, language: "en-IN" }
+        : { query: payload.text, language: payload.language || "en-IN" };
+
     // Add placeholder messages
     setState((current) => ({
       ...current,
@@ -36,7 +42,9 @@ function useRagExperience() {
         {
           id: userMsgId,
           role: "user",
-          content: isAudio ? "Transcribing voice..." : payload,
+          content: isAudio
+            ? "Transcribing voice..."
+            : normalizedPayload.query,
         },
         {
           id: assistantMsgId,
@@ -58,7 +66,7 @@ function useRagExperience() {
         body = formData;
       } else {
         headers["Content-Type"] = "application/json";
-        body = JSON.stringify({ query: payload, language: "en-IN" });
+        body = JSON.stringify(normalizedPayload);
       }
 
       const response = await fetch(`${API_BASE}/api/query`, {

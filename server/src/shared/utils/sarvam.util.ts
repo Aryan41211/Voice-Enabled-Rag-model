@@ -13,6 +13,9 @@ interface TranslateResponse {
 
 const SARVAM_API_KEY = env.SARVAM_API_KEY || process.env.SARVAM_API_KEY || "";
 
+const TRANSLATION_CACHE_LIMIT = 500;
+const translationCache = new Map<string, TranslateResponse>();
+
 /**
  * Sends an audio file buffer to Sarvam AI REST API for transcription.
  */
@@ -62,6 +65,14 @@ export async function translateText(
         throw new Error("SARVAM_API_KEY is not configured");
     }
 
+    const cacheKey = `${sourceLanguageCode}|${targetLanguageCode}|${input}`;
+    const cached = translationCache.get(cacheKey);
+    if (cached) {
+        translationCache.delete(cacheKey);
+        translationCache.set(cacheKey, cached);
+        return cached;
+    }
+
     logger.info(
         { source: sourceLanguageCode, target: targetLanguageCode, inputLength: input.length },
         "Translating text via Sarvam AI API"
@@ -88,6 +99,11 @@ export async function translateText(
 
     const data = (await response.json()) as TranslateResponse;
     logger.info("Translation completed successfully");
+
+    if (translationCache.size >= TRANSLATION_CACHE_LIMIT) {
+        translationCache.delete(translationCache.keys().next().value as string);
+    }
+    translationCache.set(cacheKey, data);
 
     return data;
 }

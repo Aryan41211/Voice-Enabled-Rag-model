@@ -5,6 +5,25 @@ import SoundWave from "./SoundWave";
 import VoiceOrb from "./VoiceOrb";
 import HeroStickers from "./HeroStickers";
 import useAudioAnalyser from "../../hooks/useAudioAnalyser";
+import useSpeechRecognition from "../../hooks/useSpeechRecognition";
+
+const VOICE_LANGUAGES = [
+  { code: "en-IN", label: "English" },
+  { code: "hi-IN", label: "Hindi" },
+  { code: "bn-IN", label: "Bengali" },
+  { code: "ta-IN", label: "Tamil" },
+  { code: "te-IN", label: "Telugu" },
+  { code: "mr-IN", label: "Marathi" },
+  { code: "gu-IN", label: "Gujarati" },
+  { code: "kn-IN", label: "Kannada" },
+  { code: "ml-IN", label: "Malayalam" },
+  { code: "pa-IN", label: "Punjabi" },
+  { code: "or-IN", label: "Odia" },
+  { code: "as-IN", label: "Assamese" },
+  { code: "ur-IN", label: "Urdu" },
+  { code: "sa-IN", label: "Sanskrit" },
+  { code: "ne-NP", label: "Nepali" },
+];
 
 function VoiceExperience({
   onVoiceQuery,
@@ -22,14 +41,74 @@ function VoiceExperience({
     onAudioReady,
   } = useAudioAnalyser();
 
+  const {
+    supported: speechSupported,
+    start: startSpeech,
+    stop: stopSpeech,
+    getTranscript,
+  } = useSpeechRecognition();
+
+  const [language, setLanguage] = useState("en-IN");
+  const [liveTranscript, setLiveTranscript] = useState("");
   const processingTimerRef = useRef(null);
+  const suppressBlobRef = useRef(false);
+
+  /*
+   * Show the live interim transcript while listening.
+   */
+  useEffect(() => {
+    if (!isActive || !speechSupported) {
+      setLiveTranscript("");
+      return undefined;
+    }
+
+    const id = window.setInterval(() => {
+      setLiveTranscript(getTranscript());
+    }, 150);
+
+    return () => {
+      window.clearInterval(id);
+    };
+  }, [isActive, speechSupported, getTranscript]);
+
+  const finishListening = useCallback(() => {
+    const transcript = speechSupported
+      ? stopSpeech()
+      : "";
+
+    suppressBlobRef.current =
+      Boolean(transcript && transcript.trim().length > 0);
+
+    stop();
+
+    if (suppressBlobRef.current) {
+      onVoiceQuery({
+        text: transcript.trim(),
+        language,
+      });
+    }
+  }, [
+    speechSupported,
+    stopSpeech,
+    stop,
+    onVoiceQuery,
+    language,
+  ]);
 
   /*
    * Pass the recorded voice audio blob
    * to the parent when recording is ready.
+   *
+   * Skipped when the browser-native transcript
+   * already handled this utterance.
    */
   useEffect(() => {
     onAudioReady((blob) => {
+      if (suppressBlobRef.current) {
+        suppressBlobRef.current = false;
+        return;
+      }
+
       onVoiceQuery(blob);
     });
   }, [onAudioReady, onVoiceQuery]);
@@ -44,13 +123,13 @@ function VoiceExperience({
         return;
       }
 
-      stop();
+      finishListening();
     });
   }, [
     isActive,
     isProcessing,
     onSilence,
-    stop,
+    finishListening,
   ]);
 
   /*
@@ -71,16 +150,24 @@ function VoiceExperience({
     }
 
     if (isActive) {
-      stop();
+      finishListening();
       return;
     }
 
     start();
+
+    if (speechSupported) {
+      suppressBlobRef.current = false;
+      startSpeech(language);
+    }
   }, [
-    isActive,
     isProcessing,
+    isActive,
+    finishListening,
     start,
-    stop,
+    speechSupported,
+    startSpeech,
+    language,
   ]);
 
   /*
@@ -352,10 +439,15 @@ useEffect(() => {
                     ================================================= */}
 
                 <div className="absolute bottom-0 left-1/2 z-40 -translate-x-1/2 text-center">
+                  <LanguagePicker
+                    language={language}
+                    onLanguageChange={setLanguage}
+                  />
                   <StatusText
                     isActive={isActive}
                     isProcessing={isProcessing}
                     error={error}
+                    liveTranscript={liveTranscript}
                   />
                 </div>
               </div>
@@ -476,10 +568,15 @@ useEffect(() => {
               {/* Compact status */}
 
               <div className="pointer-events-auto relative z-20 mt-1 text-center">
+                <LanguagePicker
+                  language={language}
+                  onLanguageChange={setLanguage}
+                />
                 <StatusText
                   isActive={isActive}
                   isProcessing={isProcessing}
                   error={error}
+                  liveTranscript={liveTranscript}
                   compact
                 />
               </div>
@@ -492,6 +589,37 @@ useEffect(() => {
 }
 
 /* =========================================================
+   LANGUAGE PICKER
+   ========================================================= */
+
+function LanguagePicker({ language, onLanguageChange }) {
+  return (
+    <label
+      className="
+        mb-2 inline-flex cursor-pointer items-center gap-1.5
+        rounded-full border border-[#171717]/10 bg-white/60
+        px-3 py-1 text-xs text-[#171717]/60 backdrop-blur-sm
+        transition-colors hover:border-[#08733F]/40
+      "
+    >
+      <span>{VOICE_LANGUAGES.find((l) => l.code === language)?.label ?? "English"}</span>
+      <select
+        value={language}
+        onChange={(event) => onLanguageChange(event.target.value)}
+        className="cursor-pointer bg-transparent text-xs outline-none"
+        aria-label="Voice input language"
+      >
+        {VOICE_LANGUAGES.map((item) => (
+          <option key={item.code} value={item.code}>
+            {item.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/* =========================================================
    STATUS TEXT
    ========================================================= */
 
@@ -499,6 +627,7 @@ function StatusText({
   isActive,
   isProcessing,
   error,
+  liveTranscript = "",
   compact = false,
 }) {
   let text = "Tap the orb and start talking";
@@ -517,10 +646,10 @@ function StatusText({
     className =
       "mb-3 text-sm text-[#08733F]";
   } else if (isActive) {
-    text = "Listening...";
+    text = liveTranscript || "Listening...";
 
     className =
-      "mb-3 text-sm text-[#08733F]";
+      "mb-3 max-w-md text-sm text-[#08733F]";
   } else if (compact) {
     text = "Ask another question";
   }

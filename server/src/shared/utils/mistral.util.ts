@@ -43,10 +43,32 @@ export function createAgent(): ChatMistralAI {
     });
 }
 
+const EMBEDDING_CACHE_LIMIT = 500;
+const embeddingCache = new Map<string, Float32Array>();
+
 /**
  * Calls Mistral API to generate a 1024-dimension text embedding vector.
+ * Results are memoized in an LRU cache keyed by the input text.
  */
 export async function getEmbedding(text: string): Promise<Float32Array> {
+    const cached = embeddingCache.get(text);
+    if (cached) {
+        embeddingCache.delete(text);
+        embeddingCache.set(text, cached);
+        return cached;
+    }
+
+    const embedding = await fetchEmbedding(text);
+
+    if (embeddingCache.size >= EMBEDDING_CACHE_LIMIT) {
+        embeddingCache.delete(embeddingCache.keys().next().value as string);
+    }
+    embeddingCache.set(text, embedding);
+
+    return embedding;
+}
+
+async function fetchEmbedding(text: string): Promise<Float32Array> {
     const apiKey = getApiKey();
     
     const response = await fetch("https://api.mistral.ai/v1/embeddings", {
@@ -80,6 +102,19 @@ export async function getEmbedding(text: string): Promise<Float32Array> {
     }
 
     return new Float32Array(embedding);
+}
+
+/**
+ * Opens a pooled TLS connection to the Mistral API at boot so the first
+ * real query does not pay TCP + TLS handshake latency.
+ */
+export async function warmEmbeddingConnection(): Promise<void> {
+    try {
+        await fetchEmbedding("warmup");
+        logger.info("Mistral embedding connection warmed up successfully");
+    } catch (err: any) {
+        logger.warn({ error: err.message }, "Embedding connection warmup failed (will retry on first query)");
+    }
 }
 
 /**
