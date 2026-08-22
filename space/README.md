@@ -13,7 +13,7 @@ license: mit
 
 Voice → transcript → retrieval → guardrailed answer. Backed by
 `ai4bharat/MSMARCO-XI` (hi) with metadata-aware passage chunking and
-`intfloat/multilingual-e5-small` embeddings. Full pipeline (retrieval +
+`intfloat/multilingual-e5-base` embeddings. Full pipeline (retrieval +
 extractive generation) ~15 ms P50 on a laptop GPU.
 
 - `GET /health` — liveness + config

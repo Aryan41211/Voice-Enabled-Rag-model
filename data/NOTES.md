@@ -8,7 +8,7 @@
 | Strategy | `metadata` (passage-level metadata indexing) |
 | Chunks | 15,008 |
 | Queries | 1,500 |
-| Embedding model | `intfloat/multilingual-e5-small` |
+| Embedding model | `intfloat/multilingual-e5-base` |
 | Dense index | `IndexFlatIP` (FAISS inner-product) |
 | Sparse index | `BM25Okapi` (rank_bm25) |
 | Split | `validation` (MSMARCO-XI `hi`) |
@@ -37,7 +37,7 @@ expand the index offline:
 
 4. **Rebuild sparse index**: Built automatically by the embed step.
 
-**Warning**: CPU embedding of millions of passages (multilingual-e5-small) will take
+**Warning**: CPU embedding of millions of passages (multilingual-e5-base) will take
 hours. Consider using a GPU runner or pre-computed embeddings if available.
 
 ## Sarvam Batch API Notes

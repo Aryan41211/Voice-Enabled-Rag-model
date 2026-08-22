@@ -54,4 +54,4 @@ machine-checkable status.
 
 ## Environment
 - GPU: RTX 4050 Laptop (CUDA available), 16.8 GB RAM
-- Embedding model: `intfloat/multilingual-e5-small` (384-d) — speed/quality sweet spot for a hackathon corpus
+- Embedding model: `intfloat/multilingual-e5-base` (768-d) — upgraded from e5-small; +14.6 pts R@5 in eval
