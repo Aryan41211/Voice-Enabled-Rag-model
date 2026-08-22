@@ -34,3 +34,7 @@ Thumbs.db
 .opencode/
 .superpowers/
 .deepeval/
+
+# browser e2e test deps
+node_modules/
+tests/browser_e2e/_cycle_*.json
