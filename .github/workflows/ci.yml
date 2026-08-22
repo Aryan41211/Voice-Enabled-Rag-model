@@ -1,4 +1,4 @@
-name: CI
+﻿name: CI
 
 on:
   push:
@@ -20,6 +20,13 @@ jobs:
         run: ruff check .
       - name: Format check
         run: ruff format --check .
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Frontend type guard (recorder null-ordering)
+        run: |
+          npm ci --prefix tests/browser_e2e
+          node tests/browser_e2e/check_frontend_types.mjs
       - name: Ensure no local env files or key literals are tracked
         run: |
           test ! -f .env
@@ -37,6 +44,8 @@ jobs:
           python-version: "3.12"
       - name: Install test dependencies
         run: pip install -r requirements-test.txt
+      - name: Install Playwright Chromium (recorder regression test)
+        run: playwright install --with-deps chromium
       - name: Run test suite
         run: python -m pytest tests -p no:cacheprovider
 
@@ -53,7 +62,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/huggingface
-          key: hf-cache-e5-small-v1
+          key: hf-cache-e5-base-v1
       - name: Install full dependencies
         run: pip install -r requirements.txt
       - name: Build tiny index (metadata strategy)
@@ -88,7 +97,7 @@ jobs:
       - name: Synthesize sample Hindi speech
         run: |
           python -m edge_tts --voice hi-IN-SwaraNeural \
-            --text "भारत का राष्ट्रीय पक्षी कौन सा है" --write-media /tmp/sample.mp3
+            --text "à¤­à¤¾à¤°à¤¤ à¤•à¤¾ à¤°à¤¾à¤·à¥à¤Ÿà¥à¤°à¥€à¤¯ à¤ªà¤•à¥à¤·à¥€ à¤•à¥Œà¤¨ à¤¸à¤¾ à¤¹à¥ˆ" --write-media /tmp/sample.mp3
           ffmpeg -y -loglevel error -i /tmp/sample.mp3 -ar 16000 -ac 1 /tmp/sample_hi.wav
       - name: Real Sarvam STT round-trip
         run: python scripts/ci_stt.py /tmp/sample_hi.wav
