@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="hi">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Voice RAG — Hindi</title>
+<title>Voice RAG</title>
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -45,28 +45,28 @@
 </head>
 <body>
   <h1>🎙️ Voice RAG</h1>
-  <div class="sub">भारत का राष्ट्रीय पक्षी कौन सा है? — बोलें या टाइप करें</div>
+  <div class="sub">Try asking: "What is India's national bird?" — speak or type</div>
 
   <div class="card">
     <div class="row">
-      <button id="recBtn">🎤 रिकॉर्ड करें</button>
-      <span id="status">तैयार</span>
+      <button id="recBtn">🎤 Record</button>
+      <span id="status">Ready</span>
     </div>
-    <div class="label">या टाइप करें</div>
-    <input id="textInput" type="text" placeholder="प्रश्न हिंदी में लिखें…">
+    <div class="label">or type</div>
+    <input id="textInput" type="text" placeholder="Type your question…">
     <div class="row">
-      <button id="askBtn">पूछें</button>
+      <button id="askBtn">Ask</button>
       <span id="err"></span>
     </div>
   </div>
 
   <div class="card hidden" id="result">
-    <div class="label">आपका प्रश्न</div>
+    <div class="label">Your question</div>
     <div id="transcript"></div>
-    <div class="label">उत्तर</div>
+    <div class="label">Answer</div>
     <div id="answer" class="answer"></div>
     <details id="srcDetails" open>
-      <summary class="label" style="cursor:pointer">स्रोत (retrieved passages)</summary>
+      <summary class="label" style="cursor:pointer">Sources (retrieved passages)</summary>
       <div id="sources"></div>
     </details>
     <div class="meta" id="meta"></div>
@@ -74,17 +74,55 @@
 
 <script>
 "use strict";
-const $ = (id) => document.getElementById(id);
+/** Look up an element by id; the page is static so all ids exist.
+ * @param {string} id
+ * @returns {HTMLElement}
+ */
+const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
 const recBtn = $("recBtn"), askBtn = $("askBtn"), statusEl = $("status"), errEl = $("err");
-const input = $("textInput"), result = $("result");
+/** @type {HTMLInputElement} */
+const input = /** @type {HTMLInputElement} */ ($("textInput"));
+const result = $("result");
 
-let recorder = null, chunks = [];
+/** @type {MediaRecorder | null} Active recorder; null when idle. */
+let recorder = null;
+/** @type {Blob[]} */
+let chunks = [];
+let activeMime = "";
 
+/**
+ * @param {string} t
+ * @param {boolean} [pulse]
+ */
 function setStatus(t, pulse) {
   statusEl.textContent = t;
   statusEl.className = pulse ? "pulse" : "";
 }
 
+// Pick the first container/codec the browser actually supports. Chrome:
+// webm+opus, Safari: mp4/aac, Firefox: webm+opus (ogg in some builds).
+// An empty return means "no explicit type" — the browser default applies.
+const MIME_CANDIDATES = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/mp4",
+  "audio/ogg;codecs=opus",
+];
+
+function pickMimeType() {
+  if (typeof MediaRecorder === "undefined") return null;
+  for (const mime of MIME_CANDIDATES) {
+    try {
+      if (MediaRecorder.isTypeSupported(mime)) return mime;
+    } catch (_) { /* isTypeSupported can throw on malformed input — keep trying */ }
+  }
+  return null;
+}
+
+/** Upload recorded audio to /v1/voice.
+ * @param {Blob} blob
+ * @returns {Promise<any>}
+ */
 async function postVoice(blob) {
   const fd = new FormData();
   fd.append("audio", blob, "speech.wav");
@@ -93,6 +131,10 @@ async function postVoice(blob) {
   return res.json();
 }
 
+/** POST a text query to /query.
+ * @param {string} text
+ * @returns {Promise<any>}
+ */
 async function postText(text) {
   const res = await fetch("/query", {
     method: "POST",
@@ -103,6 +145,12 @@ async function postText(text) {
   return res.json();
 }
 
+/**
+ * @param {Float32Array} data
+ * @param {number} fromRate
+ * @param {number} toRate
+ * @returns {Float32Array}
+ */
 function downsample(data, fromRate, toRate) {
   if (fromRate === toRate) return data;
   const ratio = fromRate / toRate;
@@ -119,9 +167,15 @@ function downsample(data, fromRate, toRate) {
   return out;
 }
 
+/**
+ * @param {Float32Array} samples
+ * @param {number} sampleRate
+ * @returns {ArrayBuffer}
+ */
 function encodeWav(samples, sampleRate) {
   const buf = new ArrayBuffer(44 + samples.length * 2);
   const v = new DataView(buf);
+  /** @type {(off: number, s: string) => void} */
   const wstr = (off, s) => { for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i)); };
   wstr(0, "RIFF"); v.setUint32(4, 36 + samples.length * 2, true); wstr(8, "WAVE");
   wstr(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
@@ -137,6 +191,10 @@ function encodeWav(samples, sampleRate) {
   return buf;
 }
 
+/** Decode any recorded container and resample to 16 kHz mono WAV.
+ * @param {Blob} blob
+ * @returns {Promise<Blob>}
+ */
 async function webmToWav(blob) {
   // OfflineAudioContext(1, 1, 16000) pins the context rate, so decodeAudioData
   // resamples the recording to exactly 16 kHz with the engine's high-quality
@@ -155,55 +213,92 @@ async function webmToWav(blob) {
 recBtn.addEventListener("click", async () => {
   if (recorder) { recorder.stop(); return; }
   errEl.textContent = "";
+  let stream;
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
+    stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
       },
     });
-    chunks = [];
-    recorder = new MediaRecorder(stream);
-    const audioTrack = stream.getAudioTracks()[0];
-    if (audioTrack) {
-      const settings = audioTrack.getSettings();
-      console.log("[stt] mic capture:", JSON.stringify({
-        sampleRate: settings.sampleRate,
-        channelCount: settings.channelCount,
-        echoCancellation: settings.echoCancellation,
-        noiseSuppression: settings.noiseSuppression,
-        autoGainControl: settings.autoGainControl,
-        mimeType: recorder.mimeType,
-      }));
-    }
-    recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-    recorder.onstop = async () => {
-      stream.getTracks().forEach((t) => t.stop());
-      recorder = null;
-      recBtn.textContent = "🎤 रिकॉर्ड करें";
-      if (!chunks.length) { setStatus("कुछ नहीं मिला"); return; }
-      setStatus("प्रोसेस हो रहा है…", true);
-      try {
-        const webmBlob = new Blob(chunks, { type: "audio/webm" });
-        console.log("[stt] raw capture:", webmBlob.size, "bytes", recorder.mimeType);
-        const wav = await webmToWav(webmBlob);
-        console.log("[stt] converted WAV:", wav.size, "bytes, 16kHz mono s16le");
-        await showResult(await postVoice(wav));
-      } catch (e) { errEl.textContent = "त्रुटि: " + e.message; setStatus("त्रुटि"); }
-    };
-    recorder.start();
-    recBtn.textContent = "⏹ रोकें";
-    recBtn.classList.add("rec");
-    setStatus("सुन रहा हूँ…", true);
   } catch (e) {
-    const hint = e.name === "NotAllowedError"
-      ? " — कृपया ब्राउज़र में माइक अनुमति दें"
-      : e.name === "NotFoundError"
-      ? " — माइक्रोफ़ोन डिटेक्ट नहीं हुआ"
-      : "";
-    errEl.textContent = "माइक नहीं मिला: " + e.message + hint;
+    let msg;
+    switch (e.name) {
+      case "NotAllowedError":
+      case "SecurityError":
+        msg = "Microphone access denied — please allow microphone permission in your browser and try again.";
+        break;
+      case "NotFoundError":
+      case "OverconstrainedError":
+        msg = "No microphone detected — connect a microphone and try again.";
+        break;
+      case "NotReadableError":
+      case "AbortError":
+        msg = "Microphone is busy or unavailable — close other apps using it and try again.";
+        break;
+      default:
+        msg = "Microphone access failed: " + e.message;
+    }
+    errEl.textContent = msg;
+    setStatus("Error");
+    return;
   }
+
+  // Resolve a supported mimeType BEFORE constructing the recorder, then read
+  // back what the browser actually selected. If no explicit type is supported
+  // we still construct without options (browser default), which succeeds on
+  // all engines; only a missing MediaRecorder API is fatal here.
+  const chosenMime = pickMimeType();
+  try {
+    recorder = chosenMime ? new MediaRecorder(stream, { mimeType: chosenMime }) : new MediaRecorder(stream);
+  } catch (e) {
+    stream.getTracks().forEach((t) => t.stop());
+    errEl.textContent = "No supported audio format available in this browser (" + e.message + ").";
+    setStatus("Error");
+    return;
+  }
+  activeMime = recorder.mimeType || chosenMime || "";
+  console.log("[stt] MediaRecorder using mimeType:", activeMime || "(browser default)");
+
+  const audioTrack = stream.getAudioTracks()[0];
+  if (audioTrack) {
+    const settings = audioTrack.getSettings();
+    console.log("[stt] mic capture:", JSON.stringify({
+      sampleRate: settings.sampleRate,
+      channelCount: settings.channelCount,
+      echoCancellation: settings.echoCancellation,
+      noiseSuppression: settings.noiseSuppression,
+      autoGainControl: settings.autoGainControl,
+      mimeType: activeMime,
+    }));
+  }
+
+  chunks = [];
+  recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+  recorder.onstop = async () => {
+    stream.getTracks().forEach((t) => t.stop());
+    // Snapshot everything we need from the recorder BEFORE dropping the
+    // reference — reading .mimeType after `recorder = null` is exactly the
+    // crash this used to be.
+    const mime = activeMime || "audio/webm";
+    recorder = null;
+    recBtn.textContent = "🎤 Record";
+    recBtn.classList.remove("rec");
+    if (!chunks.length) { setStatus("No audio captured"); return; }
+    setStatus("Processing…", true);
+    try {
+      const rawBlob = new Blob(chunks, { type: mime });
+      console.log("[stt] raw capture:", rawBlob.size, "bytes", mime);
+      const wav = await webmToWav(rawBlob);
+      console.log("[stt] converted WAV:", wav.size, "bytes, 16kHz mono s16le");
+      await showResult(await postVoice(wav));
+    } catch (e) { errEl.textContent = "Error: " + e.message; setStatus("Error"); }
+  };
+  recorder.start();
+  recBtn.textContent = "⏹ Stop";
+  recBtn.classList.add("rec");
+  setStatus("Listening…", true);
 });
 
 input.addEventListener("keydown", (e) => {
@@ -214,19 +309,26 @@ askBtn.addEventListener("click", async () => {
   const text = input.value.trim();
   if (!text) return;
   errEl.textContent = "";
-  setStatus("प्रोसेस हो रहा है…", true);
+  setStatus("Processing…", true);
   try { await showResult(await postText(text)); }
-  catch (e) { errEl.textContent = "त्रुटि: " + e.message; setStatus("त्रुटि"); }
+  catch (e) { errEl.textContent = "Error: " + e.message; setStatus("Error"); }
 });
 
+// Response shape of /query and /v1/voice.
+/**
+ * @param {{transcript: string, transcript_language?: string|null,
+ *   refused?: boolean, refusal_reason?: string|null, answer?: string|null,
+ *   sources?: Array<{chunk_id: string, passage: string}>,
+ *   timings_ms?: Record<string, number>}} r
+ */
 function showResult(r) {
   result.classList.remove("hidden");
   $("transcript").textContent = r.transcript;
   const a = $("answer");
   a.className = "answer" + (r.refused ? " refused" : "");
   a.textContent = r.refused
-    ? "⚠️ " + (r.refusal_reason || "इस प्रश्न का उत्तर नहीं दिया जा सकता")
-    : (r.answer || "कोई उत्तर नहीं");
+    ? "⚠️ " + (r.refusal_reason || "This question cannot be answered")
+    : (r.answer || "No answer");
   const srcs = $("sources");
   srcs.innerHTML = "";
   (r.sources || []).forEach((s) => {
@@ -235,12 +337,12 @@ function showResult(r) {
     d.innerHTML = "<b>[" + s.chunk_id.slice(-6) + "]</b> " + s.passage.slice(0, 160);
     srcs.appendChild(d);
   });
-  $("srcDetails").open = !r.refused;
+  /** @type {HTMLDetailsElement} */ ($("srcDetails")).open = !r.refused;
   const t = r.timings_ms || {};
   $("meta").textContent = "total " + (t.total_ms !== undefined ? t.total_ms.toFixed(1) + " ms" : "—")
     + " · retrieval " + (t.retrieval_ms !== undefined ? t.retrieval_ms.toFixed(1) + " ms" : "—")
     + " · stt " + (t.stt_ms !== undefined ? t.stt_ms.toFixed(1) + " ms" : "—");
-  setStatus("तैयार");
+  setStatus("Ready");
 }
 </script>
 </body>
