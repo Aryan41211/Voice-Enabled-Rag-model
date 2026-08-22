@@ -19,6 +19,7 @@ import logging
 import time
 import uuid
 from pathlib import Path
+from typing import Any
 
 from app.config import Settings, get_settings
 from app.generation.generator import ExtractiveGenerator, make_generator
@@ -34,6 +35,7 @@ from app.harness.schemas import (
     Transcript,
 )
 from app.ingestion.embed import Embedder
+from app.retrieval.query_expansion import expand_and_retrieve
 from app.session.rewriter import rewrite_query
 
 BACKGROUND_RANK = 20
@@ -129,6 +131,7 @@ class Pipeline:
         guardrails: GuardrailPipeline,
         generator=None,
         stt=None,
+        dense_retriever=None,
         settings: Settings | None = None,
     ) -> None:
         self.settings = settings or get_settings()
@@ -137,6 +140,7 @@ class Pipeline:
         self.guardrails = guardrails
         self.generator = generator or make_generator()
         self.stt = stt
+        self._dense_retriever = dense_retriever
         self._generation_breaker = CircuitBreaker(
             self.settings.circuit_breaker_threshold,
             self.settings.circuit_breaker_reset_s,
@@ -173,12 +177,21 @@ class Pipeline:
             retriever=retriever,
             guardrails=guardrails,
             generator=make_generator(),
+            dense_retriever=dense,
         )
 
-    def _refuse(self, reason: str, request_id: str, timings: dict) -> QueryResponse:
+    def _refuse(
+        self,
+        reason: str,
+        request_id: str,
+        timings: dict,
+        transcript_text: str = "",
+        language: str | None = None,
+    ) -> QueryResponse:
         return QueryResponse(
             request_id=request_id,
-            transcript="",
+            transcript=transcript_text,
+            transcript_language=language,
             refused=True,
             refusal_reason=reason,
             timings_ms=timings,
@@ -248,6 +261,7 @@ class Pipeline:
             return QueryResponse(
                 request_id=request_id,
                 transcript=transcript.text,
+                transcript_language=transcript.language,
                 refused=True,
                 refusal_reason=f"low_stt_confidence:{transcript.confidence:.2f}",
                 timings_ms=timings,
@@ -273,7 +287,13 @@ class Pipeline:
             extra={"stage": "input_guardrail", "success": gr.passed, "latency_ms": timings["input_guardrail_ms"]},
         )
         if gr.action != "proceed":
-            return self._refuse(gr.reason or gr.action, request_id, timings)
+            return self._refuse(
+                gr.reason or gr.action,
+                request_id,
+                timings,
+                transcript_text=transcript.text,
+                language=transcript.language,
+            )
 
         # --- Query rewriting for multi-turn --------------------------------
         query_text = transcript.text
@@ -288,7 +308,13 @@ class Pipeline:
                 timeout=self.settings.retrieval_timeout_s,
             )
         except (RetrievalError, asyncio.TimeoutError) as exc:
-            return self._refuse(f"retrieval failed: {exc}", request_id, timings)
+            return self._refuse(
+                f"retrieval failed: {exc}",
+                request_id,
+                timings,
+                transcript_text=transcript.text,
+                language=transcript.language,
+            )
         background = (
             hits[BACKGROUND_RANK - 1].score
             if len(hits) >= BACKGROUND_RANK
@@ -324,6 +350,7 @@ class Pipeline:
             return QueryResponse(
                 request_id=request_id,
                 transcript=transcript.text,
+                transcript_language=transcript.language,
                 refused=True,
                 refusal_reason=gr.reason or gr.action,
                 sources=sources,
@@ -361,6 +388,7 @@ class Pipeline:
         resp = QueryResponse(
             request_id=request_id,
             transcript=transcript.text,
+            transcript_language=transcript.language,
             answer=answer.text,
             refused=False,
             sources=sources,
@@ -409,6 +437,14 @@ class Pipeline:
         return resp
 
     async def _retrieve(self, query: str) -> list:
+        if self.settings.query_expansion_enabled and self._dense_retriever is not None:
+            return await asyncio.to_thread(
+                expand_and_retrieve,
+                query, self.embedder, self._dense_retriever,
+                k=BACKGROUND_RANK,
+                expansion_k=self.settings.expansion_k,
+                max_paraphrases=self.settings.max_paraphrases,
+            )
         cached = self._embedding_cache.get(query)
         if cached is not None:
             qv = cached

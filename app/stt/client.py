@@ -165,8 +165,15 @@ class SarvamSTT:
         self.ws_url = ws_url
         self.rest_url = rest_url
         self.timeout_s = timeout_s or settings.stt_timeout_s
-        lang = language_code or settings.data_lang
-        self.language_code = LANGUAGE_CODES.get(lang, f"{lang}-IN")
+        lang = language_code or settings.stt_language
+        # Auto-detect is spelled differently per endpoint (verified live):
+        #   realtime WS: language_code="auto"   REST/batch: "unknown"
+        # Canonical internal value follows the REST convention; the WS params
+        # translate via auto_detect.
+        self.auto_detect = lang == "auto"
+        self.language_code = (
+            "unknown" if self.auto_detect else LANGUAGE_CODES.get(lang, f"{lang}-IN")
+        )
 
     async def transcribe(self, audio_path: str | Path) -> Transcript:
         if not self.api_key:
@@ -177,6 +184,19 @@ class SarvamSTT:
         if duration is not None and duration > REST_MAX_SECONDS:
             logger.info("stt: %.1fs audio -> batch API", duration)
             return await self._transcribe_batch(audio_path)
+        if self.auto_detect:
+            # Auto-detect must use REST: the realtime WS treats "auto" as
+            # detect-and-TRANSLATE-to-English regardless of mode (verified
+            # live), while REST saaras:v3 supports transcribe + LID and
+            # returns the detected language_code. Voice queries are short,
+            # so the sync REST path (<30 s) covers them comfortably.
+            logger.info("stt: auto-detect -> REST (WS auto implies translate)")
+            try:
+                return await self._transcribe_rest(audio_path)
+            except STTBatchRequiredError:
+                # Metadata lied about duration (or was undetectable): honor
+                # the 30 s cap contract by rerouting to the batch API.
+                return await self._transcribe_batch(audio_path)
         # The realtime WS is only worth its latency for short input; when the
         # server cannot keep up (long / multi-turn audio) it would otherwise
         # eat the entire stt_timeout_s budget and the pipeline would fail
@@ -229,7 +249,7 @@ class SarvamSTT:
             )
 
         params = {
-            "language_code": self.language_code,
+            "language_code": "auto" if self.auto_detect else self.language_code,
             "model": "saaras:v3-realtime",
             "stream_type": "balanced",
             "mode": "transcribe",
@@ -272,6 +292,7 @@ class SarvamSTT:
                 )
 
                 final_parts: list[str] = []
+                detected_langs: list[str] = []
                 n_partials = 0
                 t_session = time.perf_counter()
                 async for message in ws:
@@ -305,6 +326,8 @@ class SarvamSTT:
                         text = (data.get("text") or "").strip()
                         if text:
                             final_parts.append(text)
+                            if data.get("language_code"):
+                                detected_langs.append(data["language_code"])
                             logger.debug("stt ws: final[%d]=%r", len(final_parts), text)
                     elif event == "error":
                         fatal = bool(data.get("is_fatal", True))
@@ -336,9 +359,14 @@ class SarvamSTT:
             raise STTError("Sarvam returned an empty transcript", retryable=True)
 
         latency_ms = (time.perf_counter() - t0) * 1000
+        # Prefer a language the server actually reported (auto-detect mode);
+        # majority vote across turns when they disagree.
+        ws_lang = self.language_code
+        if detected_langs:
+            ws_lang = max(set(detected_langs), key=detected_langs.count)
         return Transcript(
             text=final_text,
-            language=self.language_code,
+            language=ws_lang,
             is_final=True,
             stt_latency_ms=latency_ms,
         )
@@ -350,6 +378,9 @@ class SarvamSTT:
         }
         data = {
             "model": "saaras:v3",
+            # saaras:v3 is multi-mode; without an explicit mode it defaults to
+            # translate (English output). Always pin transcribe here.
+            "mode": "transcribe",
             "language_code": self.language_code,
             "with_timestamps": "false",
         }
@@ -388,10 +419,21 @@ class SarvamSTT:
         if not text:
             raise STTError("Sarvam REST returned an empty transcript", retryable=True)
 
+        # With auto-detect the API reports what it heard; prefer that over the
+        # requested code so downstream stages/logs reflect reality.
+        detected_lang = body.get("language_code") or self.language_code
+        detected_prob = body.get("language_probability")
+
         latency_ms = (time.perf_counter() - t0) * 1000
         return Transcript(
             text=text,
-            language=self.language_code,
+            language=detected_lang,
+            confidence=(
+                float(detected_prob)
+                if isinstance(detected_prob, (int, float))
+                and 0.0 <= detected_prob <= 1.0
+                else 1.0
+            ),
             is_final=True,
             stt_latency_ms=latency_ms,
         )
@@ -494,6 +536,7 @@ class SarvamSTT:
                 )
                 downloads = (r.json() or {}).get("download_urls") or {}
                 parts: list[str] = []
+                detected_langs: list[str] = []
                 for name in output_files:
                     dl = (downloads.get(name) or {}).get("file_url")
                     if not dl:
@@ -503,7 +546,10 @@ class SarvamSTT:
                         )
                     r = await client.get(dl)
                     if r.status_code == 200:
-                        parts.append((r.json() or {}).get("transcript") or "")
+                        body_json = r.json() or {}
+                        parts.append(body_json.get("transcript") or "")
+                        if body_json.get("language_code"):
+                            detected_langs.append(body_json["language_code"])
         except httpx.HTTPError as exc:
             raise STTError(f"Sarvam batch failed: {exc}", retryable=True)
 
@@ -512,9 +558,14 @@ class SarvamSTT:
             raise STTError("Sarvam batch returned an empty transcript", retryable=True)
         latency_ms = (time.perf_counter() - t0) * 1000
         logger.info("stt batch: done in %.0fms (%d chars)", latency_ms, len(text))
+        batch_lang = (
+            max(set(detected_langs), key=detected_langs.count)
+            if detected_langs
+            else self.language_code
+        )
         return Transcript(
             text=text,
-            language=self.language_code,
+            language=batch_lang,
             is_final=True,
             stt_latency_ms=latency_ms,
         )

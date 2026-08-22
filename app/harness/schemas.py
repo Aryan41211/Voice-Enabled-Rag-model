@@ -69,6 +69,8 @@ class Source(BaseModel):
 class QueryResponse(BaseModel):
     request_id: str
     transcript: str
+    # BCP-47 language reported by STT (auto-detect) or the client-supplied code.
+    transcript_language: str | None = None
     answer: str | None = None
     refused: bool = False
     refusal_reason: str | None = None

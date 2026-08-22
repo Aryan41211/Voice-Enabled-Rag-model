@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     rerank_model: str = "BAAI/bge-reranker-v2-m3"
     rerank_adaptive: bool = True  # skip rerank when top-1 confidence is high
 
+    # Query expansion
+    query_expansion_enabled: bool = False
+    expansion_k: int = 15
+    max_paraphrases: int = 2
+
     # Generation
     llm_provider: str = "extractive"  # extractive | groq
     llm_model: str = ""
@@ -51,6 +56,12 @@ class Settings(BaseSettings):
     stt_timeout_s: float = 20.0
     stt_provider: str = "sarvam"  # sarvam | fake (keyless local dev)
     stt_min_confidence: float = 0.4
+    # Language sent to Sarvam. "auto" uses Sarvam's native language
+    # identification (language_code="unknown", supported on the realtime WS,
+    # REST and batch endpoints); each response then reports the detected
+    # BCP-47 code + confidence. Override with a LANGUAGE_CODES key ("hi",
+    # "bn", ...) or a full BCP-47 code to pin one language.
+    stt_language: str = "auto"
 
     # Index / pipeline serving
     data_strategy: str = "metadata"
